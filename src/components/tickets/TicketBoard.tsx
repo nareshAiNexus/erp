@@ -47,6 +47,16 @@ function StatusIcon({ status }: { status: TicketStatus }) {
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ ticket }: { ticket: TicketWithEmployee }) {
+  if (ticket.avatar_url) {
+    return (
+      <img
+        src={ticket.avatar_url}
+        alt={`${ticket.first_name} ${ticket.last_name}`}
+        className="w-7 h-7 rounded-full object-cover shrink-0 border border-gray-200"
+        title={`${ticket.first_name} ${ticket.last_name}`}
+      />
+    )
+  }
   return (
     <div
       className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
@@ -253,7 +263,9 @@ function KanbanCard({ ticket, onClick }: { ticket: TicketWithEmployee; onClick: 
   return (
     <div
       onClick={onClick}
-      className="p-3.5 rounded-xl border cursor-pointer group transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('text/plain', ticket.id)}
+      className="p-3.5 rounded-xl border cursor-pointer group transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-grab active:cursor-grabbing"
       style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
     >
       {/* Company row */}
@@ -296,8 +308,8 @@ function KanbanCard({ ticket, onClick }: { ticket: TicketWithEmployee; onClick: 
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  status, tickets, onCard,
-}: { status: TicketStatus; tickets: TicketWithEmployee[]; onCard: (t: TicketWithEmployee) => void }) {
+  status, tickets, onCard, onDropTicket
+}: { status: TicketStatus; tickets: TicketWithEmployee[]; onCard: (t: TicketWithEmployee) => void; onDropTicket?: (id: string, status: TicketStatus) => void }) {
   const cfg = STATUS_CFG[status]
   return (
     <div className="flex flex-col min-w-[240px] w-[240px] shrink-0">
@@ -317,7 +329,17 @@ function KanbanColumn({
       </div>
 
       {/* Cards */}
-      <div className="flex flex-col gap-2">
+      <div 
+        className="flex flex-col gap-2 min-h-[100px] flex-1"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          const ticketId = e.dataTransfer.getData('text/plain')
+          if (ticketId && onDropTicket) {
+            onDropTicket(ticketId, status)
+          }
+        }}
+      >
         {tickets.length === 0 ? (
           <div className="py-6 text-center text-[11px] rounded-xl border border-dashed"
             style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)' }}>
@@ -356,10 +378,7 @@ function ListRow({ ticket, onClick }: { ticket: TicketWithEmployee; onClick: () 
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
-            style={{ background: avatarBg(ticket.employee_id), color: '#1a1a1a' }}>
-            {initials(ticket.first_name, ticket.last_name)}
-          </div>
+          <Avatar ticket={ticket} />
           <div>
             <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
               {ticket.first_name} {ticket.last_name}
@@ -401,6 +420,18 @@ export function TicketBoard() {
   const [search, setSearch] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('')
   const [selected, setSelected] = useState<TicketWithEmployee | null>(null)
+  const [dragConfirm, setDragConfirm] = useState<{ id: string, newStatus: TicketStatus } | null>(null)
+
+  const changeStatus = async (id: string, status: TicketStatus) => {
+    await dbQuery('UPDATE support_tickets SET status = $1 WHERE id = $2', [status, id])
+    // Notify employee of status change (basic version)
+    const ticket = tickets.find(t => t.id === id)
+    if (ticket && ticket.status !== status) {
+      const msg = `Your ticket "${ticket.title.slice(0, 50)}" has been moved to ${STATUS_CFG[status].label}.`
+      await createNotification(ticket.employee_id, 'ticket_update', msg, ticket.id)
+    }
+    qc.invalidateQueries({ queryKey: ['admin-tickets'] })
+  }
 
   const handleCardClick = (t: TicketWithEmployee) => {
     if (t.category === 'leave') {
@@ -504,7 +535,16 @@ export function TicketBoard() {
         /* ── Kanban ── */
         <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
           {STATUSES.map(s => (
-            <KanbanColumn key={s} status={s} tickets={byStatus[s]} onCard={handleCardClick} />
+            <KanbanColumn 
+              key={s} 
+              status={s} 
+              tickets={byStatus[s]} 
+              onCard={handleCardClick} 
+              onDropTicket={(id, status) => {
+                const t = tickets.find(x => x.id === id)
+                if (t && t.status !== status) setDragConfirm({ id, newStatus: status })
+              }}
+            />
           ))}
         </div>
       ) : (
@@ -544,6 +584,34 @@ export function TicketBoard() {
             qc.invalidateQueries({ queryKey: ['admin-tickets'] })
           }}
         />
+      )}
+
+      {dragConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Move</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Are you sure you want to move this ticket to <span className="font-semibold text-gray-800">{STATUS_CFG[dragConfirm.newStatus].label}</span>?
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDragConfirm(null)}
+                className="flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  changeStatus(dragConfirm.id, dragConfirm.newStatus)
+                  setDragConfirm(null)
+                }}
+                className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+              >
+                Confirm Move
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

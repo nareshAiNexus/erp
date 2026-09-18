@@ -5,11 +5,13 @@
  * - user:  sees only Dashboard (their personal calendar)
  * - Both: logout button at the bottom
  */
+import { useState } from 'react'
 import { Link, useRouterState, useRouter } from '@tanstack/react-router'
 import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../lib/AuthContext'
 import { NotificationBell } from './NotificationBell'
+import { ProfileSidebar } from './ProfileSidebar'
 import { dbQuery } from '../lib/dbClient'
 
 const ADMIN_NAV = [
@@ -36,6 +38,7 @@ export function Sidebar() {
   const router = useRouter()
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
+  const [showProfile, setShowProfile] = useState(false)
 
   const isAdmin = user?.auth_role === 'admin'
   const navItems = isAdmin ? ADMIN_NAV : USER_NAV
@@ -57,7 +60,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="w-60 shrink-0 border-r flex flex-col"
+      className="w-60 shrink-0 border-r flex flex-col relative z-50"
       style={{ borderColor: 'var(--sidebar-border)', background: 'var(--sidebar-bg)' }}
     >
       {/* Brand */}
@@ -112,16 +115,28 @@ export function Sidebar() {
       {/* Bottom: user info + logout */}
       <div className="px-4 py-4 border-t" style={{ borderColor: 'var(--sidebar-border)' }}>
         {user && (
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>
-                {user.first_name} {user.last_name}
-              </p>
-              <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-                {user.auth_role === 'admin' ? 'Administrator' : 'Employee'}
-              </p>
+          <div className="flex items-center justify-between mb-3 cursor-pointer hover:bg-gray-50 p-2 -mx-2 rounded-lg transition-colors"
+               onClick={() => setShowProfile(!showProfile)}>
+            <div className="flex items-center gap-2">
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200 object-cover" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 text-gray-500 font-bold text-xs">
+                  {user.first_name?.[0]}{user.last_name?.[0]}
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>
+                  {user.first_name} {user.last_name}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+                  {user.auth_role === 'admin' ? 'Administrator' : 'Employee'}
+                </p>
+              </div>
             </div>
-            <NotificationBell employeeId={user.id} />
+            <div onClick={e => e.stopPropagation()}>
+              <NotificationBell employeeId={user.id} />
+            </div>
           </div>
         )}
         <button
@@ -134,6 +149,8 @@ export function Sidebar() {
           Sign out
         </button>
       </div>
+
+      <ProfileSidebar isOpen={showProfile} onClose={() => setShowProfile(false)} />
     </aside>
   )
 }

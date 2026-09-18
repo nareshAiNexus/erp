@@ -54,25 +54,25 @@ export function AddTaskModal({ employee, initialDate, onClose, onSaved }: Props)
         timeStr = `${String(h).padStart(2, '0')}:${m}:00`
       }
 
-      // Create for current user
-      await dbQuery(
-        `INSERT INTO tasks (employee_id, title, description, due_date, due_time)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [employee.id, taskTitle, reason || null, taskDate, timeStr]
+      // Ensure the creator is in the assignees list
+      const assignees = Array.from(new Set([employee.id, ...taggedEmployeeIds]))
+      
+      // Create single task with assignees array
+      const taskRow = await dbQuery(
+        `INSERT INTO tasks (employee_id, title, description, due_date, due_time, assignees)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [employee.id, taskTitle, reason || null, taskDate, timeStr, assignees]
       )
 
-      // Create for tagged employees
+      // Notify tagged employees (excluding self)
       for (const tagId of taggedEmployeeIds) {
-        await dbQuery(
-          `INSERT INTO tasks (employee_id, title, description, due_date, due_time)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [tagId, taskTitle, reason || null, taskDate, timeStr]
-        )
-        await createNotification(
-          tagId, 
-          'task', 
-          `${employee.first_name} ${employee.last_name} assigned you a task: ${taskTitle}`
-        )
+        if (tagId !== employee.id) {
+          await createNotification(
+            tagId, 
+            'task', 
+            `${employee.first_name} ${employee.last_name} assigned you a task: ${taskTitle}`
+          )
+        }
       }
 
       onSaved()

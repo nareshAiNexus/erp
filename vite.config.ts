@@ -49,7 +49,7 @@ function apiPlugin() {
             if (!email || !password) return sendJson(res, 400, { error: 'Email and password required' })
             const { db } = await import('./src/lib/db.js')
             const result = await db.query(
-              `SELECT id, email, first_name, last_name, auth_role, password_hash
+              `SELECT id, email, first_name, last_name, auth_role, password_hash, avatar_url
                FROM employees WHERE email = $1 AND status != 'terminated' LIMIT 1`,
               [email]
             )
@@ -74,6 +74,7 @@ function apiPlugin() {
               first_name: row.first_name,
               last_name: row.last_name,
               auth_role: row.auth_role ?? 'user',
+              avatar_url: row.avatar_url,
             })
           } catch (err: any) {
             sendJson(res, 500, { error: err.message })

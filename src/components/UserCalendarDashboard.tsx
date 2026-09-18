@@ -29,6 +29,7 @@ type CalEvent = {
   dot: string
   bar: string
   text: string
+  avatars?: { id: string, url: string | null, initials: string }[]
   onClick?: () => void
 }
 
@@ -133,24 +134,22 @@ function LeaveModal({ date, employee, onClose, onSaved }: { date: Date, employee
           timeStr = `${String(h).padStart(2, '0')}:${m}:00`
         }
 
+        const assignees = Array.from(new Set([employee.id, ...taggedEmployeeIds]))
         await dbQuery(
-          `INSERT INTO tasks (employee_id, title, description, due_date, due_time)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [employee.id, taskTitle, reason || null, startISO, timeStr]
+          `INSERT INTO tasks (employee_id, title, description, due_date, due_time, assignees)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [employee.id, taskTitle, reason || null, startISO, timeStr, assignees]
         )
 
-        // Tagged employees
+        // Notify tagged employees
         for (const tagId of taggedEmployeeIds) {
-          await dbQuery(
-            `INSERT INTO tasks (employee_id, title, description, due_date, due_time)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [tagId, taskTitle, reason || null, startISO, timeStr]
-          )
-          await createNotification(
-            tagId, 
-            'task', 
-            `${employee.first_name} ${employee.last_name} assigned you a task: ${taskTitle}`
-          )
+          if (tagId !== employee.id) {
+            await createNotification(
+              tagId, 
+              'task', 
+              `${employee.first_name} ${employee.last_name} assigned you a task: ${taskTitle}`
+            )
+          }
         }
       } else {
         const lt  = type === 'permission' ? 'permission' : leaveType
@@ -352,10 +351,23 @@ function EventBar({ event }: { event: CalEvent }) {
           event.onClick()
         }
       }}
-      className={`flex items-center gap-1.5 px-2 py-2.5 rounded-md text-[11px] font-medium truncate w-full ${event.onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+      className={`flex items-center gap-1.5 px-2 py-2.5 rounded-md text-[11px] font-medium truncate w-full relative overflow-hidden ${event.onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
       style={{ background: event.bar, color: event.text }}>
       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: event.dot }} />
-      <span className="truncate leading-tight">{event.label}</span>
+      <span className="truncate leading-tight flex-1">{event.label}</span>
+      {event.avatars && event.avatars.length > 0 && (
+        <div className="flex -space-x-1.5 shrink-0 ml-1">
+          {event.avatars.slice(0, 3).map((a, i) => 
+            a.url ? (
+              <img key={a.id} src={a.url} alt="avatar" className="w-5 h-5 rounded-full border border-white bg-white object-cover" style={{ zIndex: 3-i }} />
+            ) : (
+              <div key={a.id} className="w-5 h-5 rounded-full border border-white bg-gray-200 text-gray-500 flex items-center justify-center text-[9px] font-bold" style={{ zIndex: 3-i }}>
+                {a.initials}
+              </div>
+            )
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -411,9 +423,10 @@ function CalendarCell({ date, today, events, canApply, onApply }: {
 
 // ─── Task List Modal ──────────────────────────────────────────────────────────
 
-function TaskListModal({ date, tasks, onClose, onChanged }: {
+function TaskListModal({ date, tasks, employees, onClose, onChanged }: {
   date: Date
   tasks: any[]
+  employees: any[]
   onClose: () => void
   onChanged: () => void
 }) {
@@ -422,8 +435,8 @@ function TaskListModal({ date, tasks, onClose, onChanged }: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        text: 'UPDATE tasks SET is_completed = $1 WHERE id = $2',
-        values: [!is_completed, id]
+        text: 'UPDATE tasks SET is_completed = $1, status = $2 WHERE id = $3',
+        values: [!is_completed, !is_completed ? 'done' : 'todo', id]
       })
     })
     onChanged()
@@ -461,15 +474,38 @@ function TaskListModal({ date, tasks, onClose, onChanged }: {
                     <p className={`text-sm font-medium ${t.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                       {t.title}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                        {t.due_time.substring(0,5)}
-                      </span>
-                      {t.description && (
-                        <span className="text-xs text-gray-400 truncate max-w-[200px]">
-                          {t.description}
+                    <div className="flex items-center gap-2 mt-1 justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          {t.due_time.substring(0,5)}
                         </span>
-                      )}
+                        {t.description && (
+                          <span className="text-xs text-gray-400 truncate max-w-[150px]">
+                            {t.description}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Avatars */}
+                      <div className="flex -space-x-1.5 shrink-0">
+                        {t.assignees?.map((empId: string, idx: number) => {
+                          if (idx > 2) return null; // Show max 3
+                          const emp = employees.find(e => e.id === empId)
+                          if (!emp) return null
+                          return emp.avatar_url ? (
+                            <img key={empId} src={emp.avatar_url} alt="avatar" className="w-5 h-5 rounded-full border-2 border-white bg-white" />
+                          ) : (
+                            <div key={empId} className="w-5 h-5 rounded-full border-2 border-white bg-gray-200 text-gray-600 flex items-center justify-center text-[8px] font-bold">
+                              {emp.first_name?.[0]}{emp.last_name?.[0]}
+                            </div>
+                          )
+                        })}
+                        {(t.assignees?.length || 0) > 3 && (
+                          <div className="w-5 h-5 rounded-full border-2 border-white bg-gray-100 text-gray-500 flex items-center justify-center text-[8px] font-bold z-10">
+                            +{t.assignees.length - 3}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -618,14 +654,23 @@ export function UserCalendarDashboard({ user }: Props) {
     due_date: string
     due_time: string
     is_completed: boolean
+    assignees: string[]
+    employee_id: string
   }
 
   const { data: tasks = [] } = useQuery<TaskRow[]>({
     queryKey: ['user-tasks', user.id, year, month],
     queryFn: () => dbQuery(`
-      SELECT id, title, description, due_date::text as due_date, due_time, is_completed FROM tasks 
-      WHERE employee_id = $1 AND EXTRACT(YEAR FROM due_date) = $2 AND EXTRACT(MONTH FROM due_date) = $3
+      SELECT id, title, description, due_date::text as due_date, due_time, is_completed, assignees, employee_id
+      FROM tasks 
+      WHERE (employee_id = $1 OR $1 = ANY(assignees)) AND EXTRACT(YEAR FROM due_date) = $2 AND EXTRACT(MONTH FROM due_date) = $3
     `, [user.id, year, month + 1])
+  })
+
+  // We need all active employees to map avatar urls
+  const { data: employees = [] } = useQuery<{ id: string, first_name: string, last_name: string, avatar_url: string }[]>({
+    queryKey: ['employees-avatars'],
+    queryFn: () => dbQuery("SELECT id, first_name, last_name, avatar_url FROM employees")
   })
 
   const { data: leaves = [] } = useQuery<LeaveRow[]>({
@@ -688,12 +733,25 @@ export function UserCalendarDashboard({ user }: Props) {
 
     const dateTasks = tasks?.filter(t => t.due_date.split('T')[0] === iso) || []
     if (dateTasks.length > 0) {
+      // Gather all assignees and creators across tasks for this day
+      const assigneeIds = Array.from(new Set(dateTasks.flatMap(t => [...(t.assignees || []), t.employee_id]).filter(Boolean)))
+      const avatars = assigneeIds.map(id => {
+        const emp = employees.find(e => e.id === id)
+        if (!emp) return null
+        return { 
+          id, 
+          url: emp.avatar_url, 
+          initials: `${emp.first_name?.[0]||''}${emp.last_name?.[0]||''}`.toUpperCase() 
+        }
+      }).filter(Boolean) as { id: string, url: string | null, initials: string }[]
+
       events.push({
         key: `tasks-${iso}`,
         label: `Tasks (${dateTasks.length})`,
         dot: '#6b7280',
         bar: '#f3f4f6',
         text: '#111827',
+        avatars,
         onClick: () => setTaskListDate(date)
       })
     }
@@ -852,6 +910,7 @@ export function UserCalendarDashboard({ user }: Props) {
         <TaskListModal
           date={taskListDate}
           tasks={tasks.filter(t => t.due_date.split('T')[0] === toISO(taskListDate))}
+          employees={employees}
           onClose={() => setTaskListDate(null)}
           onChanged={() => {
             qc.invalidateQueries({ queryKey: ['user-tasks', user.id, year, month] })

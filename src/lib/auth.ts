@@ -7,6 +7,7 @@ export type AuthUser = {
   first_name: string
   last_name: string
   auth_role: 'user' | 'admin'
+  avatar_url?: string | null
 }
 
 const SESSION_KEY = 'erp_session'

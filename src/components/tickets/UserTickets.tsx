@@ -139,22 +139,39 @@ function RaiseTicketModal({ employeeId, onClose, onSaved }: {
   )
 }
 
-// ─── Ticket Detail (read-only for user) ──────────────────────────────────────
-
-function TicketDetail({ ticket, onClose }: { ticket: SupportTicket; onClose: () => void }) {
+function TicketDetail({ ticket, onClose, onUpdated }: { ticket: SupportTicket; onClose: () => void; onUpdated: () => void }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ title: ticket.title, description: ticket.description || '' })
+  
   const sCfg = STATUS_CFG[ticket.status]
   const pCfg = PRIORITY_CFG[ticket.priority]
   const catCfg = CATEGORY_CFG[ticket.category]
+  
+  const isEditable = ticket.status !== 'closed' && ticket.status !== 'resolved'
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return
+    setSaving(true)
+    try {
+      await dbQuery('UPDATE support_tickets SET title = $1, description = $2 WHERE id = $3', [form.title, form.description, ticket.id])
+      setIsEditing(false)
+      onUpdated()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md rounded-2xl border modal-panel shadow-2xl"
+      <div className="w-full max-w-md rounded-2xl border modal-panel shadow-2xl flex flex-col max-h-[90vh]"
         style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
-        <div className="flex items-start justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <div>
+        <div className="flex items-start justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex-1 mr-4">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-mono" style={{ color: 'var(--text-tertiary)' }}>
                 #{String(ticket.ticket_no).padStart(4, '0')}
@@ -162,13 +179,23 @@ function TicketDetail({ ticket, onClose }: { ticket: SupportTicket; onClose: () 
               <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
                 style={{ background: catCfg.bg, color: catCfg.text }}>{catCfg.label}</span>
             </div>
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{ticket.title}</h2>
+            {isEditing ? (
+              <input 
+                type="text" 
+                value={form.title} 
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                className="w-full text-sm font-semibold p-1.5 border rounded-lg focus:outline-none focus:border-indigo-500" 
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              />
+            ) : (
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{ticket.title}</h2>
+            )}
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-hover)] shrink-0">
             <X size={15} style={{ color: 'var(--text-secondary)' }} />
           </button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
           <div className="flex items-center gap-3">
             <span className="text-[10px] px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5"
               style={{ background: sCfg.bg, color: sCfg.text, borderColor: sCfg.border }}>
@@ -181,28 +208,53 @@ function TicketDetail({ ticket, onClose }: { ticket: SupportTicket; onClose: () 
               {timeAgo(ticket.created_at)}
             </span>
           </div>
-          {ticket.description && (
-            <div>
-              <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Description</p>
-              <p className="text-sm" style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{ticket.description}</p>
-            </div>
-          )}
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Description</p>
+            {isEditing ? (
+              <textarea 
+                rows={4}
+                value={form.description} 
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                className="w-full text-sm p-2 border rounded-lg focus:outline-none focus:border-indigo-500 resize-none" 
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              />
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{ticket.description || <span className="italic opacity-50">No description</span>}</p>
+            )}
+          </div>
           {ticket.admin_notes && (
             <div className="p-3 rounded-xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
               <p className="text-xs font-semibold mb-1" style={{ color: '#15803d' }}>Admin Response</p>
               <p className="text-sm" style={{ color: '#166534', whiteSpace: 'pre-wrap' }}>{ticket.admin_notes}</p>
             </div>
           )}
-          {!ticket.admin_notes && ticket.status === 'new' && (
+          {!ticket.admin_notes && ticket.status === 'new' && !isEditing && (
             <p className="text-xs text-center py-2" style={{ color: 'var(--text-tertiary)' }}>
               Your ticket is in queue — an admin will respond soon.
             </p>
           )}
         </div>
-        <div className="px-5 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
-          <button onClick={onClose} className="w-full py-2 rounded-lg text-xs font-medium border"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Close</button>
-        </div>
+        
+        {isEditable && (
+          <div className="px-5 py-4 border-t flex gap-2" style={{ borderColor: 'var(--border)' }}>
+            {isEditing ? (
+              <>
+                <button onClick={() => { setIsEditing(false); setForm({ title: ticket.title, description: ticket.description || '' }) }} 
+                  className="flex-1 py-2 rounded-lg text-xs font-medium border transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+                <button onClick={handleSave} disabled={saving}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors">
+                  {saving ? 'Saving...' : 'Save Details'}
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setIsEditing(true)} 
+                className="w-full py-2 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+                Edit Details
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -456,7 +508,7 @@ export function UserTickets({ user }: Props) {
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                     style={{ background: cfg.border, color: cfg.text }}>{cols.length}</span>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 min-h-[100px] flex-1">
                   {cols.length === 0 ? (
                     <div className="py-5 text-center text-[11px] rounded-xl border border-dashed"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)' }}>Empty</div>
@@ -482,7 +534,7 @@ export function UserTickets({ user }: Props) {
       )}
 
       {selected && (
-        <TicketDetail ticket={selected} onClose={() => setSelected(null)} />
+        <TicketDetail ticket={selected} onClose={() => setSelected(null)} onUpdated={() => qc.invalidateQueries({ queryKey: ['my-tickets', user.id] })} />
       )}
     </div>
   )
