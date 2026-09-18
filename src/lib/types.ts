@@ -1,6 +1,18 @@
 // All shared TypeScript types for the ERP system.
 // This file has NO Node.js imports - safe to import from browser code.
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export type AuthUser = {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  auth_role: 'user' | 'admin'
+}
+
+
+
 export type Employee = {
   id: string
   first_name: string
@@ -58,7 +70,7 @@ export type PayrollRecord = {
 export type LeaveRequest = {
   id: string
   employee_id: string
-  leave_type: 'annual' | 'sick' | 'personal' | 'unpaid' | 'maternity' | 'paternity'
+  leave_type: 'annual' | 'sick' | 'personal' | 'unpaid' | 'maternity' | 'paternity' | 'permission'
   start_date: string
   end_date: string
   days: number
@@ -77,3 +89,32 @@ export type Policy = {
   last_updated: string
   created_at: string
 }
+
+// ─── Support Tickets ──────────────────────────────────────────────────────────
+
+export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
+export type TicketStatus   = 'new' | 'open' | 'pending' | 'resolved' | 'closed'
+export type TicketCategory = 'general' | 'hr' | 'it' | 'payroll' | 'leave' | 'billing' | 'other'
+
+export type SupportTicket = {
+  id: string
+  ticket_no: number
+  employee_id: string
+  title: string
+  description: string | null
+  category: TicketCategory
+  priority: TicketPriority
+  status: TicketStatus
+  admin_notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** SupportTicket joined with employee fields — used in admin views. */
+export type TicketWithEmployee = SupportTicket & {
+  first_name: string
+  last_name: string
+  email: string | null
+  avatar_url: string | null
+}
+

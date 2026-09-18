@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Attendance, Employee } from '../../lib/types'
 import { dbQuery } from '../../lib/dbClient'
 
@@ -11,7 +11,7 @@ export const getEmployeesFn = async () => {
 
 export const getAttendanceFn = async ({ data: date }: { data: string }) => {
   const rows = await dbQuery(`
-    SELECT a.*, e.first_name, e.last_name 
+    SELECT a.id, a.employee_id, a.date::text as date, a.status, a.check_in, a.check_out, a.notes, a.created_at, e.first_name, e.last_name 
     FROM attendance a 
     JOIN employees e ON a.employee_id = e.id 
     WHERE a.date = $1 
@@ -47,12 +47,12 @@ export const upsertAttendanceFn = async ({ data: params }: { data: {
 
 export const Route = createFileRoute('/attendance/')({ component: AttendancePage })
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  present: { label: 'Present', color: '#2e7d32' },
-  absent: { label: 'Absent', color: '#c62828' },
-  late: { label: 'Late', color: '#e65100' },
-  half_day: { label: 'Half Day', color: '#f9a825' },
-  remote: { label: 'Remote', color: '#1565c0' },
+const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+  present: { label: 'Present', color: '#2e7d32', bg: '#e8f5e9' },
+  absent: { label: 'Absent', color: '#c62828', bg: '#ffebee' },
+  late: { label: 'Late', color: '#e65100', bg: '#fff3e0' },
+  half_day: { label: 'Half Day', color: '#f9a825', bg: '#fffde7' },
+  remote: { label: 'Remote', color: '#1565c0', bg: '#e3f2fd' },
 }
 
 function AttendancePage() {
@@ -60,6 +60,12 @@ function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   )
+  const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setPendingChanges({})
+  }, [selectedDate])
 
   const { data: employees } = useQuery({
     queryKey: ['employees'],
@@ -108,13 +114,33 @@ function AttendancePage() {
             Track daily check-in and check-out
           </p>
         </div>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-3 py-2 rounded-md border text-sm"
-          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text-primary)' }}
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 rounded-md border text-sm"
+            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text-primary)' }}
+          />
+          <button
+            onClick={async () => {
+              setSaving(true)
+              try {
+                for (const [employee_id, status] of Object.entries(pendingChanges)) {
+                  await upsertMutation.mutateAsync({ employee_id, status })
+                }
+                setPendingChanges({})
+              } finally {
+                setSaving(false)
+              }
+            }}
+            disabled={saving || Object.keys(pendingChanges).length === 0}
+            className="px-4 py-2 rounded-md text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ background: 'var(--text-primary)' }}
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
@@ -152,7 +178,7 @@ function AttendancePage() {
             <tbody>
               {(employees ?? []).map((emp) => {
                 const record = recordMap.get(emp.id)
-                const status = record?.status ?? 'present'
+                const status = pendingChanges[emp.id] ?? record?.status ?? 'absent'
                 const sc = statusConfig[status]
                 return (
                   <tr key={emp.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
@@ -173,20 +199,26 @@ function AttendancePage() {
                       <select
                         value={status}
                         onChange={(e) => {
-                          upsertMutation.mutate({
-                            employee_id: emp.id,
-                            status: e.target.value,
-                          })
+                          setPendingChanges(prev => ({
+                            ...prev,
+                            [emp.id]: e.target.value
+                          }))
                         }}
-                        className="text-xs px-2 py-1 rounded border font-medium"
+                        className="text-xs px-2 py-1.5 rounded-md border font-semibold cursor-pointer outline-none hover:opacity-90 transition-opacity"
                         style={{
-                          borderColor: 'var(--border)',
-                          background: 'var(--bg)',
+                          borderColor: 'transparent',
+                          background: sc.bg,
                           color: sc.color,
                         }}
                       >
                         {Object.entries(statusConfig).map(([key, cfg]) => (
-                          <option key={key} value={key}>{cfg.label}</option>
+                          <option 
+                            key={key} 
+                            value={key}
+                            style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}
+                          >
+                            {cfg.label}
+                          </option>
                         ))}
                       </select>
                     </td>

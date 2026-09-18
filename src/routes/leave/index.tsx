@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { Plus, CalendarOff, Check, X } from 'lucide-react'
+import { CalendarOff, Check, X } from 'lucide-react'
 import type { LeaveRequest, Employee } from '../../lib/types'
 import { dbQuery } from '../../lib/dbClient'
 
@@ -25,6 +25,19 @@ export const getEmployeesFn = async () => {
 
 export const updateLeaveStatusFn = async ({ data: { id, status } }: { data: { id: string; status: string } }) => {
   await dbQuery('UPDATE leave_requests SET status = $1 WHERE id = $2', [status, id])
+
+  if (status === 'approved' || status === 'rejected' || status === 'cancelled') {
+    const rows = await dbQuery('SELECT employee_id FROM leave_requests WHERE id = $1', [id])
+    if (rows.length > 0) {
+      const ticketStatus = status === 'approved' ? 'resolved' : 'closed'
+      await dbQuery(
+        `UPDATE support_tickets 
+         SET status = $1, admin_notes = $2 
+         WHERE employee_id = $3 AND category = 'leave' AND status IN ('new', 'open', 'pending')`,
+        [ticketStatus, `Leave request was ${status}.`, rows[0].employee_id]
+      )
+    }
+  }
 }
 
 export const saveLeaveRequestFn = async ({ data: payload }: { data: any }) => {
@@ -47,6 +60,7 @@ const leaveTypeLabels: Record<string, string> = {
   unpaid: 'Unpaid Leave',
   maternity: 'Maternity Leave',
   paternity: 'Paternity Leave',
+  permission: 'Permission (Hourly)',
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -99,13 +113,6 @@ function LeavePage() {
             Manage time-off requests
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-medium text-white"
-          style={{ background: 'var(--text-primary)' }}
-        >
-          <Plus size={15} /> Request Leave
-        </button>
       </div>
 
       <div className="flex items-center gap-2 mb-4">
@@ -165,12 +172,20 @@ function LeavePage() {
                       {emp?.first_name} {emp?.last_name}
                     </p>
                     <p className="text-xs mb-2" style={{ color: 'var(--text-tertiary)' }}>
-                      {emp?.department} · {leaveTypeLabels[r.leave_type]}
+                      {emp?.department} · {leaveTypeLabels[r.leave_type] || r.leave_type}
                     </p>
                     <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      <span>{r.start_date} → {r.end_date}</span>
-                      <span>·</span>
-                      <span>{r.days} day{r.days > 1 ? 's' : ''}</span>
+                      {r.leave_type === 'permission' ? (
+                        <span>{r.start_date?.split('T')[0]}</span>
+                      ) : (
+                        <span>{r.start_date?.split('T')[0]} → {r.end_date?.split('T')[0]}</span>
+                      )}
+                      {r.days > 0 && (
+                        <>
+                          <span>·</span>
+                          <span>{r.days} day{r.days > 1 ? 's' : ''}</span>
+                        </>
+                      )}
                     </div>
                     {r.reason && (
                       <p className="text-xs mt-2" style={{ color: 'var(--text-secondary)' }}>

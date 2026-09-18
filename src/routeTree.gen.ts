@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AttendanceIndexRouteImport } from './routes/attendance/index'
 import { Route as EmployeesIndexRouteImport } from './routes/employees/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
@@ -17,10 +18,17 @@ import { Route as LeaveIndexRouteImport } from './routes/leave/index'
 import { Route as PayrollIndexRouteImport } from './routes/payroll/index'
 import { Route as PoliciesIndexRouteImport } from './routes/policies/index'
 import { Route as PoliciesPolicyIdRouteImport } from './routes/policies/$policyId'
+import { Route as TasksIndexRouteImport } from './routes/tasks/index'
+import { Route as TicketsIndexRouteImport } from './routes/tickets/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AttendanceIndexRoute = AttendanceIndexRouteImport.update({
@@ -58,9 +66,20 @@ const PoliciesPolicyIdRoute = PoliciesPolicyIdRouteImport.update({
   path: '/policies/$policyId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TasksIndexRoute = TasksIndexRouteImport.update({
+  id: '/tasks/',
+  path: '/tasks/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TicketsIndexRoute = TicketsIndexRouteImport.update({
+  id: '/tickets/',
+  path: '/tickets/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance/': typeof AttendanceIndexRoute
   '/employees/': typeof EmployeesIndexRoute
@@ -68,9 +87,12 @@ export interface FileRoutesByFullPath {
   '/leave/': typeof LeaveIndexRoute
   '/payroll/': typeof PayrollIndexRoute
   '/policies/': typeof PoliciesIndexRoute
+  '/tasks/': typeof TasksIndexRoute
+  '/tickets/': typeof TicketsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance': typeof AttendanceIndexRoute
   '/employees': typeof EmployeesIndexRoute
@@ -78,10 +100,13 @@ export interface FileRoutesByTo {
   '/leave': typeof LeaveIndexRoute
   '/payroll': typeof PayrollIndexRoute
   '/policies': typeof PoliciesIndexRoute
+  '/tasks': typeof TasksIndexRoute
+  '/tickets': typeof TicketsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance/': typeof AttendanceIndexRoute
   '/employees/': typeof EmployeesIndexRoute
@@ -89,11 +114,14 @@ export interface FileRoutesById {
   '/leave/': typeof LeaveIndexRoute
   '/payroll/': typeof PayrollIndexRoute
   '/policies/': typeof PoliciesIndexRoute
+  '/tasks/': typeof TasksIndexRoute
+  '/tickets/': typeof TicketsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/policies/$policyId'
     | '/attendance/'
     | '/employees/'
@@ -101,9 +129,12 @@ export interface FileRouteTypes {
     | '/leave/'
     | '/payroll/'
     | '/policies/'
+    | '/tasks/'
+    | '/tickets/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/policies/$policyId'
     | '/attendance'
     | '/employees'
@@ -111,9 +142,12 @@ export interface FileRouteTypes {
     | '/leave'
     | '/payroll'
     | '/policies'
+    | '/tasks'
+    | '/tickets'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/policies/$policyId'
     | '/attendance/'
     | '/employees/'
@@ -121,10 +155,13 @@ export interface FileRouteTypes {
     | '/leave/'
     | '/payroll/'
     | '/policies/'
+    | '/tasks/'
+    | '/tickets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   PoliciesPolicyIdRoute: typeof PoliciesPolicyIdRoute
   AttendanceIndexRoute: typeof AttendanceIndexRoute
   EmployeesIndexRoute: typeof EmployeesIndexRoute
@@ -132,6 +169,8 @@ export interface RootRouteChildren {
   LeaveIndexRoute: typeof LeaveIndexRoute
   PayrollIndexRoute: typeof PayrollIndexRoute
   PoliciesIndexRoute: typeof PoliciesIndexRoute
+  TasksIndexRoute: typeof TasksIndexRoute
+  TicketsIndexRoute: typeof TicketsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -141,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/attendance/': {
@@ -192,11 +238,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PoliciesPolicyIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tasks/': {
+      id: '/tasks/'
+      path: '/tasks'
+      fullPath: '/tasks/'
+      preLoaderRoute: typeof TasksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tickets/': {
+      id: '/tickets/'
+      path: '/tickets'
+      fullPath: '/tickets/'
+      preLoaderRoute: typeof TicketsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   PoliciesPolicyIdRoute: PoliciesPolicyIdRoute,
   AttendanceIndexRoute: AttendanceIndexRoute,
   EmployeesIndexRoute: EmployeesIndexRoute,
@@ -204,16 +265,9 @@ const rootRouteChildren: RootRouteChildren = {
   LeaveIndexRoute: LeaveIndexRoute,
   PayrollIndexRoute: PayrollIndexRoute,
   PoliciesIndexRoute: PoliciesIndexRoute,
+  TasksIndexRoute: TasksIndexRoute,
+  TicketsIndexRoute: TicketsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
