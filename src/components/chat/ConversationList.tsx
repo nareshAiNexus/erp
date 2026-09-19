@@ -3,7 +3,7 @@
  * Shows group channels + direct messages with unread badges.
  */
 import { useState } from 'react'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, Bell } from 'lucide-react'
 import { useChat } from '../../lib/ChatContext'
 import { useAuth } from '../../lib/AuthContext'
 import { NewConversationDialog } from './NewConversationDialog'
@@ -45,7 +45,10 @@ function timeAgo(iso: string | null) {
 
 export function ConversationList() {
   const { user } = useAuth()
-  const { conversations, selectedConvId, setSelectedConvId, loadMessages, employees, presence } = useChat()
+  const {
+    conversations, selectedConvId, setSelectedConvId, loadMessages, employees, presence,
+    notificationPermission, enableNotifications, sendTestNotification,
+  } = useChat()
   const [search, setSearch] = useState('')
   const [showNewDialog, setShowNewDialog] = useState(false)
 
@@ -109,10 +112,18 @@ export function ConversationList() {
             </>
           ) : (
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm"
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm overflow-hidden"
               style={{ background: '#ede9fe', color: '#7c3aed' }}
             >
-              {(displayName)[0].toUpperCase()}
+              {conv.avatar_url ? (
+                conv.avatar_url.startsWith('http') || conv.avatar_url.startsWith('data:') ? (
+                  <img src={conv.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-base leading-none">{conv.avatar_url}</span>
+                )
+              ) : (
+                <span>{(displayName)[0].toUpperCase()}</span>
+              )}
             </div>
           )}
         </div>
@@ -133,16 +144,16 @@ export function ConversationList() {
           <div className="flex items-center gap-1">
             <span
               className="text-[11px] truncate flex-1"
-              style={{ color: conv.unread_count > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)', fontWeight: conv.unread_count > 0 ? 500 : 400 }}
+              style={{ color: Number(conv.unread_count) > 0 ? 'var(--text-secondary)' : 'var(--text-tertiary)', fontWeight: Number(conv.unread_count) > 0 ? 500 : 400 }}
             >
               {lastMsgPreview}
             </span>
-            {conv.unread_count > 0 && (
+            {Number(conv.unread_count) > 0 && (
               <span
                 className="flex-shrink-0 min-w-[18px] h-4.5 px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
                 style={{ background: '#111827', fontSize: 10, height: 18 }}
               >
-                {conv.unread_count > 99 ? '99+' : conv.unread_count}
+                {Number(conv.unread_count) > 99 ? '99+' : Number(conv.unread_count)}
               </span>
             )}
           </div>
@@ -160,14 +171,31 @@ export function ConversationList() {
       <div className="px-4 pt-5 pb-3">
         <div className="flex items-center justify-between mb-3">
           <h1 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>Messages</h1>
-          <button
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-            style={{ color: 'var(--text-secondary)' }}
-            onClick={() => setShowNewDialog(true)}
-            title="New conversation"
-          >
-            <Plus size={15} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className={`p-1.5 rounded-lg transition-colors ${
+                notificationPermission === 'granted'
+                  ? 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                  : 'text-amber-500 hover:text-amber-600 hover:bg-amber-50'
+              }`}
+              onClick={notificationPermission === 'granted' ? sendTestNotification : enableNotifications}
+              title={
+                notificationPermission === 'granted'
+                  ? 'Windows push notifications active — click to test'
+                  : 'Click to enable Windows desktop push notifications'
+              }
+            >
+              <Bell size={14} />
+            </button>
+            <button
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              style={{ color: 'var(--text-secondary)' }}
+              onClick={() => setShowNewDialog(true)}
+              title="New conversation"
+            >
+              <Plus size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -185,6 +213,24 @@ export function ConversationList() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+
+        {/* Enable Push Notifications Banner if not granted */}
+        {notificationPermission !== 'granted' && (
+          <div
+            onClick={enableNotifications}
+            className="mt-2.5 px-2.5 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 transition-colors border border-violet-200 cursor-pointer flex items-center justify-between shadow-xs"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Bell size={13} className="text-violet-600 flex-shrink-0 animate-bounce" />
+              <span className="text-[11px] font-medium text-violet-900 truncate">
+                Enable Windows push alerts
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-violet-700 bg-white px-1.5 py-0.5 rounded shadow-xs flex-shrink-0 border border-violet-100">
+              Enable
+            </span>
+          </div>
+        )}
       </div>
 
       {/* List */}

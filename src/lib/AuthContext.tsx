@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { getSession, setSession, clearSession, type AuthUser } from './auth'
+import { disconnectChatSocket } from './chat'
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 
@@ -18,11 +19,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => getSession())
 
   const login = useCallback((u: AuthUser) => {
+    disconnectChatSocket()
     setSession(u)
     setUser(u)
   }, [])
 
   const logout = useCallback(() => {
+    disconnectChatSocket()
     clearSession()
     setUser(null)
   }, [])

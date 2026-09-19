@@ -25,10 +25,13 @@ export function getSession(): AuthUser | null {
 /** Persist a session to localStorage after successful login. */
 export function setSession(user: AuthUser): void {
   try {
-    const { avatar_url, ...safeUser } = user
-    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser))
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user))
   } catch (err) {
-    console.warn('Failed to save session to localStorage (quota exceeded?)', err)
+    console.warn('Failed to save session to localStorage with avatar, falling back to safe user', err)
+    try {
+      const { avatar_url, ...safeUser } = user
+      localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser))
+    } catch {}
   }
 }
 

@@ -1,12 +1,13 @@
 /**
  * ChatPopover — bottom-right floating DM panel (~360x480px).
- * Opens when clicking an avatar in the FloatingContactRail.
+ * Opens when clicking an avatar or group in the FloatingContactRail.
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Send, Pencil, Check, X as XIcon } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { X, Send, Pencil, Check, CheckCheck, X as XIcon, Settings, AtSign } from 'lucide-react'
 import { useChat } from '../../lib/ChatContext'
 import { useAuth } from '../../lib/AuthContext'
 import type { ChatMessage } from '../../lib/chat'
+import { GroupEditModal } from './GroupEditModal'
 
 type PresenceStatus = 'online' | 'on_leave' | 'offline'
 
@@ -36,6 +37,47 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function MessageStatusTicks({ status }: { status?: 'sending' | 'sent' | 'delivered' | 'read' }) {
+  if (status === 'read') {
+    return (
+      <span title="Read" className="inline-flex items-center text-sky-500 flex-shrink-0">
+        <CheckCheck size={12} strokeWidth={2.5} />
+      </span>
+    )
+  }
+  if (status === 'delivered') {
+    return (
+      <span title="Delivered" className="inline-flex items-center text-gray-400 flex-shrink-0">
+        <CheckCheck size={12} strokeWidth={2.5} />
+      </span>
+    )
+  }
+  return (
+    <span title="Sent" className="inline-flex items-center text-gray-400 flex-shrink-0">
+      <Check size={12} strokeWidth={2.5} />
+    </span>
+  )
+}
+
+function renderMessageText(text: string, isMine: boolean) {
+  const parts = text.split(/(@[a-zA-Z0-9_\s]+?)(?=\s@|\s|$|[.,!?])/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('@') && part.length > 1) {
+      return (
+        <span
+          key={i}
+          className={`font-semibold px-1 py-0.5 rounded ${
+            isMine ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'
+          }`}
+        >
+          {part}
+        </span>
+      )
+    }
+    return part
+  })
+}
+
 export function ChatPopover() {
   const { user } = useAuth()
   const {
@@ -47,6 +89,11 @@ export function ChatPopover() {
   const [input, setInput] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBody, setEditBody] = useState('')
+  const [showGroupEdit, setShowGroupEdit] = useState(false)
+  const [showMentions, setShowMentions] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionIndex, setMentionIndex] = useState(0)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -56,12 +103,25 @@ export function ChatPopover() {
   // The other person in a DM
   const otherMember = conv?.members?.find(m => m.id !== user?.id)
   const otherEmp = employees.find(e => e.id === otherMember?.id)
-  const otherStatus = (presence[otherMember?.id || ''] || 'offline') as PresenceStatus
+  const otherStatus = (otherMember ? (presence[otherMember.id] || 'offline') : 'offline') as PresenceStatus
 
   // The name to display (group name or DM partner name)
   const displayName = conv?.type === 'group'
     ? (conv.name || 'Group')
     : (otherMember ? `${otherMember.first_name} ${otherMember.last_name}` : '...')
+
+  // Mention suggestions
+  const mentionCandidates = useMemo(() => {
+    const list = conv?.members && conv.members.length > 0
+      ? conv.members.map(m => employees.find(e => e.id === m.id) || m)
+      : employees
+
+    return list.filter(e => {
+      if (e.id === user?.id) return false
+      const fullName = `${e.first_name} ${e.last_name}`.toLowerCase()
+      return fullName.includes(mentionQuery.toLowerCase())
+    })
+  }, [conv?.members, employees, mentionQuery, user?.id])
 
   // Load messages on open
   useEffect(() => {
@@ -74,24 +134,92 @@ export function ChatPopover() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [convMessages.length])
 
-  // Mark read when opened
+  // Mark read strictly when user is ACTUALLY viewing and window is focused
+  const tryMarkRead = useCallback(() => {
+    if (!popoverConvId || convMessages.length === 0 || !user) return
+    if (typeof document !== 'undefined') {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    }
+    const lastIncoming = [...convMessages].reverse().find(m => m.sender_id !== user.id)
+    if (lastIncoming) {
+      markRead(popoverConvId, lastIncoming.id)
+    }
+  }, [popoverConvId, convMessages, user, markRead])
+
   useEffect(() => {
-    if (!popoverConvId || convMessages.length === 0) return
-    const lastMsg = convMessages[convMessages.length - 1]
-    markRead(popoverConvId, lastMsg.id)
-  }, [popoverConvId, convMessages.length]) // eslint-disable-line
+    tryMarkRead()
+  }, [tryMarkRead])
+
+  useEffect(() => {
+    const handleFocus = () => tryMarkRead()
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [tryMarkRead])
 
   const handleSend = useCallback(() => {
     if (!input.trim() || !popoverConvId) return
     sendMessage(popoverConvId, input.trim())
     setInput('')
+    setShowMentions(false)
     inputRef.current?.focus()
   }, [input, popoverConvId, sendMessage])
 
+  const insertMention = (emp: any) => {
+    const cursor = inputRef.current?.selectionStart || input.length
+    const textBefore = input.slice(0, cursor)
+    const textAfter = input.slice(cursor)
+    const newTextBefore = textBefore.replace(/@([a-zA-Z0-9_]{0,20})$/, `@${emp.first_name} ${emp.last_name} `)
+    setInput(newTextBefore + textAfter)
+    setShowMentions(false)
+    setTimeout(() => inputRef.current?.focus(), 10)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showMentions && mentionCandidates.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex(i => (i + 1) % mentionCandidates.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex(i => (i - 1 + mentionCandidates.length) % mentionCandidates.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertMention(mentionCandidates[mentionIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        setShowMentions(false)
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setInput(val)
+
+    const cursor = e.target.selectionStart
+    const textBefore = val.slice(0, cursor)
+    const match = textBefore.match(/@([a-zA-Z0-9_]{0,20})$/)
+    if (match) {
+      setMentionQuery(match[1])
+      setShowMentions(true)
+      setMentionIndex(0)
+    } else {
+      setShowMentions(false)
     }
   }
 
@@ -118,10 +246,11 @@ export function ChatPopover() {
 
   return (
     <div
-      className="fixed bottom-4 right-16 z-[200] flex flex-col rounded-2xl overflow-hidden"
+      className="fixed bottom-3 right-16 z-[200] flex flex-col rounded-2xl overflow-hidden shadow-2xl"
       style={{
         width: 360,
         height: 480,
+        maxHeight: 'calc(100vh - 24px)',
         background: '#ffffff',
         border: '1px solid var(--border)',
         boxShadow: '0 8px 40px rgba(0,0,0,0.14)',
@@ -142,13 +271,30 @@ export function ChatPopover() {
           </div>
         )}
         {conv?.type === 'group' && (
-          <div className="w-[34px] h-[34px] rounded-full bg-violet-100 flex items-center justify-center text-violet-600 font-bold text-xs flex-shrink-0">
-            {(conv.name || 'G')[0].toUpperCase()}
+          <div
+            onClick={() => setShowGroupEdit(true)}
+            className="w-[34px] h-[34px] rounded-xl bg-violet-100 flex items-center justify-center text-violet-600 font-bold text-xs flex-shrink-0 cursor-pointer hover:opacity-80 overflow-hidden"
+          >
+            {conv.avatar_url ? (
+              conv.avatar_url.startsWith('http') || conv.avatar_url.startsWith('data:') ? (
+                <img src={conv.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-base leading-none">{conv.avatar_url}</span>
+              )
+            ) : (
+              <span>{(conv.name || 'G')[0].toUpperCase()}</span>
+            )}
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+        <div
+          className={`flex-1 min-w-0 ${conv?.type === 'group' ? 'cursor-pointer' : ''}`}
+          onClick={() => {
+            if (conv?.type === 'group') setShowGroupEdit(true)
+          }}
+        >
+          <div className="font-semibold text-sm truncate flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
             {displayName}
+            {conv?.type === 'group' && <Pencil size={11} className="text-gray-400" />}
           </div>
           {conv?.type === 'dm' && (
             <div className="text-[11px]" style={{ color: presenceColor(otherStatus) }}>
@@ -162,7 +308,7 @@ export function ChatPopover() {
           )}
         </div>
         <button
-          className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
           style={{ color: 'var(--text-secondary)' }}
           onClick={closePopover}
         >
@@ -171,7 +317,7 @@ export function ChatPopover() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
+      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 min-h-0">
         {convMessages.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
             No messages yet. Say hello!
@@ -195,34 +341,34 @@ export function ChatPopover() {
                 {isEditing ? (
                   <div className="flex flex-col gap-1 w-full">
                     <textarea
-                      className="text-sm px-2 py-1 rounded-lg border w-full resize-none"
+                      className="text-sm px-2 py-1 rounded-lg border w-full resize-none outline-none"
                       style={{ borderColor: 'var(--border-strong)', minHeight: 60 }}
                       value={editBody}
                       onChange={e => setEditBody(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() } if (e.key === 'Escape') cancelEdit() }}
                       autoFocus
                     />
-                    <div className="flex gap-1">
-                      <button onClick={commitEdit} className="px-2 py-0.5 rounded text-[11px] bg-gray-900 text-white flex items-center gap-1"><Check size={10} /> Save</button>
+                    <div className="flex gap-1 justify-end">
                       <button onClick={cancelEdit} className="px-2 py-0.5 rounded text-[11px] border flex items-center gap-1" style={{ borderColor: 'var(--border)' }}><XIcon size={10} /> Cancel</button>
+                      <button onClick={commitEdit} className="px-2 py-0.5 rounded text-[11px] bg-gray-900 text-white flex items-center gap-1"><Check size={10} /> Save</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="relative">
+                  <div className="relative group/bubble">
                     <div
-                      className="px-3 py-2 rounded-2xl text-sm leading-relaxed"
+                      className="px-3.5 py-2 rounded-2xl text-sm leading-relaxed shadow-sm break-words"
                       style={
                         isMine
-                          ? { background: '#111827', color: '#fff', borderBottomRightRadius: 6 }
-                          : { background: 'var(--bg-subtle)', color: 'var(--text-primary)', borderBottomLeftRadius: 6 }
+                          ? { background: '#111827', color: '#fff', borderTopRightRadius: 4 }
+                          : { background: 'var(--bg-subtle)', color: 'var(--text-primary)', borderTopLeftRadius: 4 }
                       }
                     >
-                      {msg.body}
+                      <p className="whitespace-pre-wrap">{renderMessageText(msg.body, isMine)}</p>
                     </div>
                     {/* Edit pencil — only on own messages */}
                     {isMine && (
                       <button
-                        className="absolute -top-1 -left-6 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full bg-white shadow-sm border"
+                        className="absolute -top-1 -left-6 opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 rounded-full bg-white shadow-sm border"
                         style={{ borderColor: 'var(--border)' }}
                         onClick={() => startEdit(msg)}
                       >
@@ -231,13 +377,14 @@ export function ChatPopover() {
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-1 mt-0.5">
+                <div className="flex items-center gap-1 mt-0.5 px-0.5">
                   <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
                     {formatTime(msg.created_at)}
                   </span>
                   {msg.edited_at && (
                     <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>(edited)</span>
                   )}
+                  {isMine && <MessageStatusTicks status={msg.status} />}
                 </div>
               </div>
             </div>
@@ -259,28 +406,61 @@ export function ChatPopover() {
 
       {/* Composer */}
       <div
-        className="px-3 py-2.5 border-t flex items-end gap-2 flex-shrink-0"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+        className="px-3 py-2 border-t flex items-end gap-1.5 flex-shrink-0 bg-white relative"
+        style={{ borderColor: 'var(--border)' }}
       >
+        {/* Mentions popup */}
+        {showMentions && mentionCandidates.length > 0 && (
+          <div
+            className="absolute bottom-full mb-2 left-3 w-56 max-h-40 overflow-y-auto rounded-xl border bg-white shadow-xl py-1 z-30 divide-y divide-gray-100"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            {mentionCandidates.map((emp, i) => (
+              <div
+                key={emp.id}
+                onClick={() => insertMention(emp)}
+                className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs transition-colors ${
+                  i === mentionIndex ? 'bg-violet-50 text-violet-900' : 'hover:bg-gray-50'
+                }`}
+              >
+                <Avatar emp={emp} size={20} />
+                <span className="font-medium truncate">{emp.first_name} {emp.last_name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            setInput(prev => prev + '@')
+            setShowMentions(true)
+            inputRef.current?.focus()
+          }}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors flex-shrink-0 mb-0.5"
+          title="Tag someone (@)"
+        >
+          <AtSign size={15} />
+        </button>
+
         <textarea
           ref={inputRef}
-          className="flex-1 resize-none rounded-xl px-3 py-2 text-sm leading-relaxed"
+          className="flex-1 resize-none rounded-xl px-2.5 py-1.5 text-xs leading-relaxed outline-none border transition-all focus:border-gray-900"
           style={{
             background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)',
+            borderColor: 'var(--border)',
             color: 'var(--text-primary)',
-            minHeight: 36,
-            maxHeight: 100,
-            outline: 'none',
+            minHeight: 32,
+            maxHeight: 90,
           }}
           placeholder={`Message ${displayName}…`}
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           rows={1}
         />
         <button
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95"
           style={{
             background: input.trim() ? '#111827' : 'var(--bg-hover)',
             color: input.trim() ? '#fff' : 'var(--text-tertiary)',
@@ -288,9 +468,17 @@ export function ChatPopover() {
           onClick={handleSend}
           disabled={!input.trim()}
         >
-          <Send size={15} />
+          <Send size={13} />
         </button>
       </div>
+
+      {/* Group Edit Modal */}
+      {showGroupEdit && conv?.type === 'group' && (
+        <GroupEditModal
+          conversation={conv}
+          onClose={() => setShowGroupEdit(false)}
+        />
+      )}
     </div>
   )
 }

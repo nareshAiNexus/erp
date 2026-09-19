@@ -5,7 +5,7 @@
  * - user:  sees only Dashboard (their personal calendar)
  * - Both: logout button at the bottom
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useRouterState, useRouter } from '@tanstack/react-router'
 import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare, ClipboardCheck, MessageSquare } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -38,12 +38,22 @@ const USER_NAV = [
 ]
 
 export function Sidebar() {
-  const { user, logout } = useAuth()
-  const { totalUnread } = useChat()
+  const { user, login, logout } = useAuth()
+  const { totalUnread, employees } = useChat()
   const router = useRouter()
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const [showProfile, setShowProfile] = useState(false)
+
+  const myEmployee = employees.find(e => e.id === user?.id)
+  const userAvatar = user?.avatar_url || myEmployee?.avatar_url
+
+  // Auto-sync avatar to user session if missing in local storage
+  useEffect(() => {
+    if (user && !user.avatar_url && myEmployee?.avatar_url) {
+      login({ ...user, avatar_url: myEmployee.avatar_url })
+    }
+  }, [user, myEmployee?.avatar_url, login])
 
   const isAdmin = user?.auth_role === 'admin'
   const navItems = isAdmin ? ADMIN_NAV : USER_NAV
@@ -128,8 +138,8 @@ export function Sidebar() {
           <div className="flex items-center justify-between mb-3 cursor-pointer hover:bg-gray-50 p-2 -mx-2 rounded-lg transition-colors"
                onClick={() => setShowProfile(!showProfile)}>
             <div className="flex items-center gap-2">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200 object-cover" />
+              {userAvatar ? (
+                <img src={userAvatar} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200 object-cover" />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 text-gray-500 font-bold text-xs">
                   {user.first_name?.[0]}{user.last_name?.[0]}

@@ -51,11 +51,13 @@ function Avatar({ emp, size = 40 }: { emp: any; size?: number }) {
 
 export function FloatingContactRail() {
   const { user } = useAuth()
-  const { employees, presence, conversations, openPopover, popoverConvId } = useChat()
+  const { employees, presence, conversations, openPopover, openPopoverConv, popoverConvId } = useChat()
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   if (!user) return null
+
+  const groups = conversations.filter(c => c.type === 'group')
 
   // Build contact list: show other employees, sorted by presence (online first), limit 8
   const contacts = employees
@@ -73,9 +75,10 @@ export function FloatingContactRail() {
   // Compute unread per user (from DM conversations)
   const unreadByUser: Record<string, number> = {}
   conversations.forEach(c => {
-    if (c.type === 'dm' && c.unread_count > 0) {
+    const count = Number(c.unread_count) || 0
+    if (c.type === 'dm' && count > 0) {
       const other = c.members?.find(m => m.id !== user.id)
-      if (other) unreadByUser[other.id] = (unreadByUser[other.id] || 0) + c.unread_count
+      if (other) unreadByUser[other.id] = (unreadByUser[other.id] || 0) + count
     }
   })
 
@@ -95,6 +98,63 @@ export function FloatingContactRail() {
             boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
           }}
         >
+          {/* Groups Section */}
+          {groups.map(grp => {
+            const unread = Number(grp.unread_count) || 0
+            return (
+              <div
+                key={grp.id}
+                className="relative cursor-pointer group"
+                onMouseEnter={() => setHoveredId(grp.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onClick={() => openPopoverConv(grp.id)}
+              >
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm overflow-hidden border shadow-sm transition-transform active:scale-95"
+                  style={{ background: '#ede9fe', color: '#7c3aed', borderColor: '#ddd6fe' }}
+                >
+                  {grp.avatar_url ? (
+                    grp.avatar_url.startsWith('http') || grp.avatar_url.startsWith('data:') ? (
+                      <img src={grp.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-base leading-none">{grp.avatar_url}</span>
+                    )
+                  ) : (
+                    <span>{(grp.name || 'G')[0].toUpperCase()}</span>
+                  )}
+                </div>
+
+                {/* Unread badge */}
+                {unread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+
+                {/* Tooltip */}
+                {hoveredId === grp.id && (
+                  <div
+                    className="absolute right-full mr-3 top-1/2 -translate-y-1/2 z-50 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap pointer-events-none"
+                    style={{
+                      background: '#111',
+                      color: '#fff',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    }}
+                  >
+                    <div className="font-medium">{grp.name || 'Group'}</div>
+                    <div className="text-[10px] text-gray-400">{grp.members?.length || 0} members</div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Divider between groups and direct messages */}
+          {groups.length > 0 && contacts.length > 0 && (
+            <div className="w-6 border-t my-0.5" style={{ borderColor: 'var(--border)' }} />
+          )}
+
+          {/* Contacts */}
           {contacts.map(emp => {
             const ringColor = presenceRingColor(emp.status)
             const unread = unreadByUser[emp.id] || 0
@@ -127,9 +187,9 @@ export function FloatingContactRail() {
                 />
 
                 {/* Unread badge */}
-                {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border border-white">
-                    {unread > 9 ? '9+' : unread}
+                {Number(unread) > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                    {Number(unread) > 99 ? '99+' : Number(unread)}
                   </span>
                 )}
 
@@ -152,7 +212,7 @@ export function FloatingContactRail() {
           })}
 
           {/* Divider */}
-          {contacts.length > 0 && (
+          {(contacts.length > 0 || groups.length > 0) && (
             <div className="w-6 border-t my-0.5" style={{ borderColor: 'var(--border)' }} />
           )}
 

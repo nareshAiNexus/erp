@@ -18,14 +18,7 @@ function MessagesPage() {
   const [showMemberInfo, setShowMemberInfo] = useState(true)
 
   return (
-    <div
-      className="flex"
-      style={{
-        height: 'calc(100vh - 64px)',
-        margin: '-2rem -2rem',  // undo the px-8 py-8 padding from root layout
-        overflow: 'hidden',
-      }}
-    >
+    <div className="flex h-full w-full overflow-hidden">
       {/* Left: Conversation list */}
       <ConversationList />
 

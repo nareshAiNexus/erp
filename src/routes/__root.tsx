@@ -5,6 +5,7 @@ import { Sidebar } from '../components/Sidebar'
 import { useAuth } from '../lib/AuthContext'
 import { ChatProvider } from '../lib/ChatContext'
 import { FloatingContactRail } from '../components/chat/FloatingContactRail'
+import { DesktopToastNotification } from '../components/chat/DesktopToastNotification'
 
 interface MyRouterContext {
   queryClient: QueryClient
@@ -42,16 +43,19 @@ function RootLayout() {
   // Not authenticated yet — render nothing while redirect fires
   if (!user) return null
 
+  const isMessagesPage = currentPath.startsWith('/messages')
+
   return (
     <ChatProvider>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <main className="flex-1 min-w-0 overflow-auto">
-          <div className="px-8 py-8">
+        <main className={`flex-1 min-w-0 ${isMessagesPage ? 'h-full overflow-hidden' : 'overflow-auto'}`}>
+          <div className={isMessagesPage ? 'h-full' : 'px-8 py-8'}>
             <Outlet />
           </div>
         </main>
         <FloatingContactRail />
+        <DesktopToastNotification />
       </div>
     </ChatProvider>
   )
