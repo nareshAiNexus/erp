@@ -1,333 +1,252 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Package } from 'lucide-react'
-import type { InventoryItem } from '../../lib/types'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import { Plus, Monitor, Cpu, Box, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table'
+import type { SortingState } from '@tanstack/react-table'
 import { dbQuery } from '../../lib/dbClient'
+import { AssetFormModal } from '../../components/inventory/AssetFormModal'
 
-export const getInventoryFn = async () => {
-  const rows = await dbQuery('SELECT * FROM inventory_items ORDER BY name')
-  return rows as InventoryItem[]
+export const Route = createFileRoute('/inventory/')({
+  component: InventoryBoard,
+})
+
+type Asset = {
+  id: number
+  asset_tag: string | null
+  category: 'system' | 'electronics' | 'other'
+  asset_type: string
+  model_name: string | null
+  operating_system: string | null
+  ram: string | null
+  storage_raw: string | null
+  processor: string | null
+  working_condition: string | null
+  other_product_name_id: number | null
+  quantity: number | null
+  status: string
 }
 
-export const deleteInventoryItemFn = async ({ data: id }: { data: string }) => {
-  await dbQuery('DELETE FROM inventory_items WHERE id = $1', [id])
+const columnHelper = createColumnHelper<Asset>()
+
+function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
+  if (sorted === 'asc') return <ChevronUp size={13} className="ml-1 inline-block opacity-70" />
+  if (sorted === 'desc') return <ChevronDown size={13} className="ml-1 inline-block opacity-70" />
+  return <ChevronsUpDown size={12} className="ml-1 inline-block opacity-30" />
 }
 
-export const saveInventoryItemFn = async ({ data: payload }: { data: any }) => {
-  if (payload.id) {
-    await dbQuery(`
-      UPDATE inventory_items SET
-        name = $1, sku = $2, category = $3, quantity = $4, unit_price = $5,
-        reorder_level = $6, supplier = $7, location = $8
-      WHERE id = $9
-    `, [
-      payload.name, payload.sku, payload.category, payload.quantity, payload.unit_price,
-      payload.reorder_level, payload.supplier, payload.location, payload.id
-    ])
-  } else {
-    await dbQuery(`
-      INSERT INTO inventory_items (
-        name, sku, category, quantity, unit_price, reorder_level, supplier, location
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [
-      payload.name, payload.sku, payload.category, payload.quantity, payload.unit_price,
-      payload.reorder_level, payload.supplier, payload.location
-    ])
-  }
-}
+function InventoryBoard() {
+  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState<'system' | 'electronics' | 'other'>('system')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [sorting, setSorting] = useState<SortingState>([])
 
-export const Route = createFileRoute('/inventory/')({ component: InventoryPage })
-
-function InventoryPage() {
-  const queryClient = useQueryClient()
-  const [showForm, setShowForm] = useState(false)
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
-
-  const { data: items, isLoading } = useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => getInventoryFn(),
+  const { data: assets = [], isLoading } = useQuery<Asset[]>({
+    queryKey: ['assets', activeTab],
+    queryFn: async () => {
+      const res = await dbQuery('SELECT * FROM assets WHERE category = $1 ORDER BY id DESC', [activeTab])
+      return res as Asset[]
+    }
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteInventoryItemFn({ data: id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] })
-      queryClient.invalidateQueries({ queryKey: ['low-stock'] })
-    },
+  const columns = useMemo(() => {
+    const baseColumns = [
+      columnHelper.display({
+        id: 'row_num',
+        header: '#',
+        enableSorting: false,
+        cell: info => (
+          <span style={{ color: 'var(--text-tertiary)' }} className="tabular-nums">
+            {info.row.index + 1}
+          </span>
+        ),
+      }),
+      columnHelper.accessor('asset_tag', {
+        header: 'Asset Tag',
+        enableSorting: true,
+        cell: info => info.getValue() || <span style={{ color: 'var(--text-tertiary)' }} className="italic">Untagged</span>,
+      }),
+      columnHelper.accessor('asset_type', {
+        header: 'Type',
+        enableSorting: true,
+        cell: info => <span className="capitalize">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor('model_name', {
+        header: 'Model',
+        enableSorting: true,
+        cell: info => info.getValue() || '-',
+      }),
+      columnHelper.accessor('status', {
+        enableSorting: true,
+        header: 'Status',
+        cell: info => (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+            info.getValue() === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
+            info.getValue() === 'in_repair' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+            'bg-gray-100 text-gray-600 border-gray-200'
+          }`}>
+            {info.getValue().toUpperCase()}
+          </span>
+        ),
+      }),
+    ]
+
+    if (activeTab === 'system') {
+      return [
+        ...baseColumns,
+        columnHelper.accessor('processor', { header: 'Processor', enableSorting: true, cell: info => info.getValue() || '-' }),
+        columnHelper.accessor('ram', { header: 'RAM', enableSorting: true, cell: info => info.getValue() ? `${info.getValue()} GB` : '-' }),
+        columnHelper.accessor('storage_raw', { header: 'Storage', enableSorting: true, cell: info => info.getValue() || '-' }),
+        columnHelper.accessor('operating_system', { header: 'OS', enableSorting: true, cell: info => info.getValue() || '-' }),
+      ]
+    } else if (activeTab === 'electronics') {
+      return [
+        ...baseColumns,
+        columnHelper.accessor('working_condition', {
+          header: 'Condition',
+          cell: info => (
+            <span className={`capitalize ${info.getValue() === 'working' ? 'text-green-600' : 'text-orange-600'}`}>
+              {info.getValue()?.replace('_', ' ') || '-'}
+            </span>
+          )
+        }),
+      ]
+    } else {
+      return [
+        columnHelper.accessor('asset_type', {
+          header: 'Item',
+          cell: info => <span className="capitalize">{info.getValue()}</span>,
+        }),
+        columnHelper.accessor('quantity', {
+          header: 'Quantity',
+          cell: info => info.getValue() || '-',
+        }),
+      ]
+    }
+  }, [activeTab])
+
+  const table = useReactTable({
+    data: assets,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   })
 
-  const lowStock = (items ?? []).filter((i) => i.quantity <= i.reorder_level)
-  const totalValue = (items ?? []).reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
+  const tabBtn = (tab: typeof activeTab, label: string, Icon: any) => (
+    <button
+      onClick={() => { setActiveTab(tab); setSorting([]) }}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+      style={{
+        background: activeTab === tab ? 'var(--bg-hover)' : 'transparent',
+        color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
+        fontWeight: activeTab === tab ? 600 : 400,
+      }}
+    >
+      <Icon size={15} />
+      {label}
+    </button>
+  )
 
   return (
-    <div className="fade-in">
-      <div className="flex items-center justify-between mb-6">
+    <div className="fade-in max-w-[1400px] mx-auto h-[calc(100vh-100px)] flex flex-col">
+      <div className="mb-5 flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Inventory
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-            {items?.length ?? 0} items · Total value ${totalValue.toFixed(2)}
-          </p>
+          <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Inventory</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>Track and manage company assets</p>
         </div>
         <button
-          onClick={() => { setEditingItem(null); setShowForm(true) }}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-medium text-white"
-          style={{ background: 'var(--text-primary)' }}
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--bg)' }}
         >
-          <Plus size={15} /> Add Item
+          <Plus size={15} />
+          Add Asset
         </button>
       </div>
 
-      {lowStock.length > 0 && (
-        <div
-          className="flex items-center gap-2 px-4 py-3 rounded-lg mb-4 text-sm"
-          style={{ background: '#fff3e0', color: '#e65100' }}
-        >
-          <AlertTriangle size={16} />
-          <span>
-            {lowStock.length} item{lowStock.length > 1 ? 's' : ''} at or below reorder level
-          </span>
-        </div>
-      )}
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 pb-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+        {tabBtn('system', 'Systems', Monitor)}
+        {tabBtn('electronics', 'Electronics', Cpu)}
+        {tabBtn('other', 'Other', Box)}
+      </div>
 
-      {isLoading ? (
-        <div className="py-12 text-center" style={{ color: 'var(--text-tertiary)' }}>
-          Loading inventory...
-        </div>
-      ) : (
-        <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-          <table className="w-full">
-            <thead>
-              <tr style={{ background: 'var(--bg-subtle)' }}>
-                <th className="text-left text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Item</th>
-                <th className="text-left text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>SKU</th>
-                <th className="text-left text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Category</th>
-                <th className="text-right text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Qty</th>
-                <th className="text-right text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Unit Price</th>
-                <th className="text-left text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Supplier</th>
-                <th className="text-right text-xs font-semibold px-4 py-3" style={{ color: 'var(--text-secondary)' }}>Actions</th>
-              </tr>
+      <div className="flex-1 rounded-xl border overflow-hidden flex flex-col" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
+        <div className="overflow-x-auto flex-1 custom-scrollbar relative">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-hover)' }}>
+              {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id} className="border-b" style={{ borderColor: 'var(--border)' }}>
+                  {headerGroup.headers.map(header => (
+                    <th
+                      key={header.id}
+                      className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider select-none"
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        cursor: header.column.getCanSort() ? 'pointer' : 'default',
+                        userSelect: 'none',
+                        width: header.id === 'row_num' ? '48px' : undefined,
+                      }}
+                      onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                    >
+                      <span className="flex items-center gap-1">
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() && (
+                          <SortIcon sorted={header.column.getIsSorted()} />
+                        )}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody>
-              {(items ?? []).map((item) => {
-                const isLow = item.quantity <= item.reorder_level
-                return (
-                  <tr key={item.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                          style={{ background: 'var(--bg-subtle)' }}
-                        >
-                          <Package size={14} style={{ color: 'var(--text-secondary)' }} />
-                        </div>
-                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                          {item.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--text-tertiary)' }}>
-                      {item.sku}
-                    </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-primary)' }}>
-                      {item.category}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: isLow ? '#e65100' : 'var(--text-primary)' }}
-                      >
-                        {item.quantity}
-                      </span>
-                      {isLow && (
-                        <span className="text-xs ml-1" style={{ color: '#e65100' }}>(low)</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm" style={{ color: 'var(--text-primary)' }}>
-                      ${item.unit_price.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      {item.supplier}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => { setEditingItem(item); setShowForm(true) }}
-                          className="p-1.5 rounded hover:bg-[var(--bg-hover)]"
-                          style={{ color: 'var(--text-secondary)' }}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete ${item.name}?`)) {
-                              deleteMutation.mutate(item.id)
-                            }
-                          }}
-                          className="p-1.5 rounded hover:bg-[var(--bg-hover)]"
-                          style={{ color: 'var(--text-secondary)' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-5 py-10 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    Loading assets...
+                  </td>
+                </tr>
+              ) : assets.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-5 py-10 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    No {activeTab} assets found.
+                  </td>
+                </tr>
+              ) : (
+                table.getRowModel().rows.map(row => (
+                  <tr
+                    key={row.id}
+                    onClick={() => navigate({ to: `/inventory/${row.original.id}` })}
+                    className="border-b last:border-b-0 cursor-pointer transition-colors"
+                    style={{ borderColor: 'var(--border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <td key={cell.id} className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
-                )
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
-      )}
-
-      {showForm && (
-        <InventoryForm
-          item={editingItem}
-          onClose={() => setShowForm(false)}
-          onSaved={() => {
-            setShowForm(false)
-            queryClient.invalidateQueries({ queryKey: ['inventory'] })
-            queryClient.invalidateQueries({ queryKey: ['low-stock'] })
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-type FormProps = {
-  item: InventoryItem | null
-  onClose: () => void
-  onSaved: () => void
-}
-
-function InventoryForm({ item, onClose, onSaved }: FormProps) {
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    name: item?.name ?? '',
-    sku: item?.sku ?? '',
-    category: item?.category ?? 'General',
-    quantity: item?.quantity?.toString() ?? '0',
-    unit_price: item?.unit_price?.toString() ?? '0',
-    reorder_level: item?.reorder_level?.toString() ?? '10',
-    supplier: item?.supplier ?? '',
-    location: item?.location ?? '',
-  })
-
-  const set = (key: string, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-
-    const payload = {
-      id: item?.id,
-      name: form.name,
-      sku: form.sku || null,
-      category: form.category,
-      quantity: parseInt(form.quantity) || 0,
-      unit_price: parseFloat(form.unit_price) || 0,
-      reorder_level: parseInt(form.reorder_level) || 10,
-      supplier: form.supplier || null,
-      location: form.location || null,
-    }
-
-    try {
-      await saveInventoryItemFn({ data: payload })
-      setSaving(false)
-      onSaved()
-    } catch (err: any) {
-      setError(err.message)
-      setSaving(false)
-    }
-  }
-
-  const inputClass = 'w-full px-3 py-2 rounded-md border text-sm'
-  const inputStyle = { borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text-primary)' }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-      style={{ background: 'rgba(0,0,0,0.3)' }}
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border modal-panel"
-        style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-          <h2 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-            {item ? 'Edit Item' : 'Add Item'}
-          </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--bg-hover)]">
-            <Trash2 size={16} style={{ color: 'var(--text-secondary)' }} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div className="px-3 py-2 rounded-md text-xs" style={{ background: '#ffebee', color: '#c62828' }}>
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Name</label>
-              <input className={inputClass} style={inputStyle} value={form.name} onChange={(e) => set('name', e.target.value)} required />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>SKU</label>
-              <input className={inputClass} style={inputStyle} value={form.sku} onChange={(e) => set('sku', e.target.value)} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Quantity</label>
-              <input type="number" className={inputClass} style={inputStyle} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Unit Price</label>
-              <input type="number" step="0.01" className={inputClass} style={inputStyle} value={form.unit_price} onChange={(e) => set('unit_price', e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Reorder At</label>
-              <input type="number" className={inputClass} style={inputStyle} value={form.reorder_level} onChange={(e) => set('reorder_level', e.target.value)} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Category</label>
-              <input className={inputClass} style={inputStyle} value={form.category} onChange={(e) => set('category', e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Location</label>
-              <input className={inputClass} style={inputStyle} value={form.location} onChange={(e) => set('location', e.target.value)} />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-secondary)' }}>Supplier</label>
-            <input className={inputClass} style={inputStyle} value={form.supplier} onChange={(e) => set('supplier', e.target.value)} />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-sm font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-md text-sm font-medium text-white" style={{ background: 'var(--text-primary)' }}>
-              {saving ? 'Saving...' : item ? 'Save Changes' : 'Add Item'}
-            </button>
-          </div>
-        </form>
       </div>
+
+      {showAddModal && (
+        <AssetFormModal onClose={() => setShowAddModal(false)} />
+      )}
     </div>
   )
 }

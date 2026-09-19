@@ -1,1 +1,0 @@
-import 'dotenv/config'; import pg from 'pg'; const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL }); pool.query('SELECT count(*) FROM employees').then(res => { console.log('Success:', res.rows); process.exit(0); }).catch(err => { console.error('Error:', err); process.exit(1); });

@@ -8,7 +8,8 @@
  * Leave / permission requests also raise a support ticket + notify admins.
  * Policies are shown in a separate scrollable section below.
  */
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import { dbQuery } from '../lib/dbClient'
@@ -421,6 +422,154 @@ function CalendarCell({ date, today, events, canApply, onApply }: {
   )
 }
 
+// ─── Fan Avatar Component ─────────────────────────────────────────────────────
+
+function FanAvatars({ assignees, employees, onSelectProfile }: {
+  assignees: string[]
+  employees: any[]
+  onSelectProfile: (emp: any) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  const resolved = assignees
+    .map(id => employees.find(e => e.id === id))
+    .filter(Boolean)
+
+  if (resolved.length === 0) return null
+
+  // collapsed: show stacked avatars
+  // expanded: fan out in a right-side half arc
+
+  const RADIUS = 45 // px from center
+  const closeTimeout = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState({ x: 0, y: 0 })
+
+  const handleEnter = () => {
+    if (closeTimeout.current) clearTimeout(closeTimeout.current)
+    if (!expanded && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      setCoords({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+    }
+    setExpanded(true)
+  }
+
+  const handleLeave = () => {
+    closeTimeout.current = setTimeout(() => setExpanded(false), 150)
+  }
+
+  return (
+    <div 
+      ref={containerRef}
+      className="relative flex items-center z-20" 
+      style={{ height: 28 }}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+    >
+      {/* Stacked collapsed avatars — always visible */}
+      <div className={`flex -space-x-1.5 z-10 transition-opacity duration-200 ${expanded ? 'opacity-0' : 'opacity-100'}`}>
+        {resolved.slice(0, 3).map((emp: any, idx: number) => (
+          <Avatar key={emp.id} emp={emp} size={20} zIndex={3 - idx} />
+        ))}
+        {resolved.length > 3 && (
+          <div className="w-5 h-5 rounded-full border-2 border-white bg-gray-100 text-gray-500 flex items-center justify-center text-[8px] font-bold z-10">
+            +{resolved.length - 3}
+          </div>
+        )}
+      </div>
+
+      {/* Fan overlay rendered via Portal to escape overflow:hidden */}
+      {expanded && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100]" style={{ pointerEvents: 'none' }}>
+          <style>{`
+            @keyframes fanOutAnim {
+              from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+              to { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1); }
+            }
+          `}</style>
+          <div 
+            className="absolute rounded-full" 
+            style={{ 
+              left: coords.x, 
+              top: coords.y, 
+              width: 160,
+              height: 160,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'auto' 
+            }}
+            onMouseEnter={handleEnter}
+            onMouseLeave={handleLeave}
+          >
+            {/* Fan avatars */}
+            {resolved.map((emp: any, idx: number) => {
+              // Pack them starting from top-right (-60 degrees) moving downwards with a fixed gap
+              const startAngle = -60
+              const angleStep = 45 // degrees between each avatar
+              const angle = startAngle + (idx * angleStep)
+              const rad = (angle * Math.PI) / 180
+              const x = Math.cos(rad) * RADIUS
+              const y = Math.sin(rad) * RADIUS
+
+              return (
+                <div
+                  key={emp.id}
+                  className="absolute top-1/2 left-1/2 cursor-pointer flex items-center group"
+                  style={{
+                    '--tx': `calc(-50% + ${x}px)`,
+                    '--ty': `calc(-50% + ${y}px)`,
+                    animation: `fanOutAnim 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards`,
+                    animationDelay: `${idx * 40}ms`,
+                    opacity: 0,
+                  } as React.CSSProperties}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setExpanded(false)
+                    onSelectProfile(emp)
+                  }}
+                >
+                  <div className="relative flex items-center z-10 hover:scale-110 transition-transform">
+                    <Avatar emp={emp} size={32} ring />
+                  </div>
+                  {/* Tooltip positioned to the right */}
+                  <span className="absolute left-full ml-2 whitespace-nowrap bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-sm z-[100]">
+                    {emp.first_name} {emp.last_name}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+function Avatar({ emp, size, zIndex, ring }: { emp: any; size: number; zIndex?: number; ring?: boolean }) {
+  const style: React.CSSProperties = {
+    width: size,
+    height: size,
+    zIndex: zIndex ?? 1,
+    outline: ring ? '2px solid white' : undefined,
+    outlineOffset: ring ? '1px' : undefined,
+  }
+  return emp.avatar_url ? (
+    <img
+      src={emp.avatar_url}
+      alt={emp.first_name}
+      className="rounded-full border-2 border-white object-cover"
+      style={style}
+    />
+  ) : (
+    <div
+      className="rounded-full border-2 border-white bg-gray-200 text-gray-700 flex items-center justify-center font-bold"
+      style={{ ...style, fontSize: size * 0.38 }}
+    >
+      {emp.first_name?.[0]}{emp.last_name?.[0]}
+    </div>
+  )
+}
+
 // ─── Task List Modal ──────────────────────────────────────────────────────────
 
 function TaskListModal({ date, tasks, employees, onClose, onChanged }: {
@@ -430,6 +579,8 @@ function TaskListModal({ date, tasks, employees, onClose, onChanged }: {
   onClose: () => void
   onChanged: () => void
 }) {
+  const [profileEmp, setProfileEmp] = useState<any>(null)
+
   const toggleTask = async (id: string, is_completed: boolean) => {
     await fetch('/api/query', {
       method: 'POST',
@@ -443,80 +594,140 @@ function TaskListModal({ date, tasks, employees, onClose, onChanged }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background:'rgba(0,0,0,0.4)' }}
-      onMouseDown={(e)=>{ if(e.target===e.currentTarget) onClose() }}>
-      <div className="w-full max-w-sm rounded-2xl border shadow-2xl bg-white">
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor:'#e5e7eb' }}>
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color:'#111827' }}>
-              Tasks for {date.toLocaleDateString('en-IN',{day:'numeric', month:'long'})}
-            </h2>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
-            <X size={14} style={{ color:'#6b7280' }} />
-          </button>
-        </div>
+    <>
+      {/* @keyframes fanOut injected inline */}
+      <style>{`
+        @keyframes fanOut {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+      `}</style>
 
-        <div className="p-2 max-h-[60vh] overflow-y-auto">
-          {tasks.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">No tasks for this day.</p>
-          ) : (
-            <ul className="space-y-1">
-              {tasks.map(t => (
-                <li key={t.id} className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-                    onClick={() => toggleTask(t.id, t.is_completed)}>
-                  <div className="mt-0.5 shrink-0">
-                    <input type="checkbox" checked={t.is_completed} readOnly 
-                           className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer" />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-medium ${t.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                      {t.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1 justify-between w-full">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {t.due_time.substring(0,5)}
-                        </span>
-                        {t.description && (
-                          <span className="text-xs text-gray-400 truncate max-w-[150px]">
-                            {t.description}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: 'rgba(0,0,0,0.3)' }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+        <div className="w-full max-w-sm rounded-2xl border shadow-xl" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Tasks for {date.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
+            </h2>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+              <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+            </button>
+          </div>
+
+          <div className="p-2 max-h-[60vh] overflow-y-auto">
+            {tasks.length === 0 ? (
+              <p className="text-sm text-center py-4" style={{ color: 'var(--text-tertiary)' }}>No tasks for this day.</p>
+            ) : (
+              <ul className="space-y-1">
+                {tasks.map(t => (
+                  <li key={t.id}
+                    className="flex items-start gap-3 p-3 rounded-xl transition-colors cursor-pointer"
+                    style={{ background: 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    onClick={() => toggleTask(t.id, t.is_completed)}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      <input type="checkbox" checked={t.is_completed} readOnly
+                        className="w-4 h-4 rounded cursor-pointer" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${t.is_completed ? 'line-through' : ''}`}
+                        style={{ color: t.is_completed ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                        {t.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5 justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>
+                            {t.due_time.substring(0, 5)}
                           </span>
-                        )}
-                      </div>
-                      
-                      {/* Avatars */}
-                      <div className="flex -space-x-1.5 shrink-0">
-                        {t.assignees?.map((empId: string, idx: number) => {
-                          if (idx > 2) return null; // Show max 3
-                          const emp = employees.find(e => e.id === empId)
-                          if (!emp) return null
-                          return emp.avatar_url ? (
-                            <img key={empId} src={emp.avatar_url} alt="avatar" className="w-5 h-5 rounded-full border-2 border-white bg-white" />
-                          ) : (
-                            <div key={empId} className="w-5 h-5 rounded-full border-2 border-white bg-gray-200 text-gray-600 flex items-center justify-center text-[8px] font-bold">
-                              {emp.first_name?.[0]}{emp.last_name?.[0]}
-                            </div>
-                          )
-                        })}
-                        {(t.assignees?.length || 0) > 3 && (
-                          <div className="w-5 h-5 rounded-full border-2 border-white bg-gray-100 text-gray-500 flex items-center justify-center text-[8px] font-bold z-10">
-                            +{t.assignees.length - 3}
+                          {t.description && (
+                            <span className="text-xs truncate max-w-[120px]" style={{ color: 'var(--text-tertiary)' }}>
+                              {t.description}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Fan avatars */}
+                        {t.assignees?.length > 0 && (
+                          <div onClick={e => e.stopPropagation()}>
+                            <FanAvatars
+                              assignees={t.assignees}
+                              employees={employees}
+                              onSelectProfile={setProfileEmp}
+                            />
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Profile overlay */}
+      {profileEmp && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-end"
+          style={{ background: 'rgba(0,0,0,0.2)' }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setProfileEmp(null) }}
+        >
+          <div
+            className="h-full w-80 border-l shadow-2xl overflow-y-auto p-6 flex flex-col gap-4"
+            style={{ background: 'var(--bg)', borderColor: 'var(--border)', animation: 'slideInRight 0.25s ease' }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Team Member</p>
+              <button onClick={() => setProfileEmp(null)} style={{ color: 'var(--text-tertiary)' }}>✕</button>
+            </div>
+            {/* Avatar */}
+            <div className="flex flex-col items-center gap-3 py-4">
+              {profileEmp.avatar_url ? (
+                <img src={profileEmp.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md" />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-2xl font-bold text-gray-600 border-4 border-white shadow-md">
+                  {profileEmp.first_name?.[0]}{profileEmp.last_name?.[0]}
+                </div>
+              )}
+              <div className="text-center">
+                <p className="font-semibold text-base" style={{ color: 'var(--text-primary)' }}>{profileEmp.first_name} {profileEmp.last_name}</p>
+                {profileEmp.role && <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>{profileEmp.role}</p>}
+                {profileEmp.department && <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{profileEmp.department}</p>}
+              </div>
+            </div>
+            {/* Details */}
+            <div className="space-y-3">
+              {profileEmp.email && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="w-5 text-center" style={{ color: 'var(--text-tertiary)' }}>@</span>
+                  <span>{profileEmp.email}</span>
+                </div>
+              )}
+              {profileEmp.phone && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="w-5 text-center" style={{ color: 'var(--text-tertiary)' }}>📞</span>
+                  <span>{profileEmp.phone}</span>
+                </div>
+              )}
+              {profileEmp.hire_date && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="w-5 text-center" style={{ color: 'var(--text-tertiary)' }}>📅</span>
+                  <span>Joined {new Date(profileEmp.hire_date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
+
 
 // ─── Correction Modal ─────────────────────────────────────────────────────────
 
@@ -747,7 +958,7 @@ export function UserCalendarDashboard({ user }: Props) {
 
       events.push({
         key: `tasks-${iso}`,
-        label: `Tasks (${dateTasks.length})`,
+        label: `Tasks - ${dateTasks.length}`,
         dot: '#6b7280',
         bar: '#f3f4f6',
         text: '#111827',

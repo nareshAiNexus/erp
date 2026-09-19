@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../lib/AuthContext'
 import { dbQuery } from '../../lib/dbClient'
 import { Calendar, Clock, Loader2, Plus, MoreHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AddTaskModal } from '../../components/AddTaskModal'
 
 export const Route = createFileRoute('/tasks/')({
@@ -22,6 +23,128 @@ type Task = {
 }
 
 type EmployeeInfo = { id: string, first_name: string, last_name: string, avatar_url: string }
+
+function RadialAssignees({ assignees, employees }: { assignees: string[], employees: EmployeeInfo[] }) {
+  const [open, setOpen] = useState(false)
+  const [coords, setCoords] = useState({ x: 0, y: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+  const closeTimeout = useRef<any>(null)
+  const getInitials = (f: string, l: string) => `${f?.[0]||''}${l?.[0]||''}`.toUpperCase()
+
+  if (!assignees || assignees.length === 0) return null
+
+  const handleEnter = () => {
+    if (closeTimeout.current) clearTimeout(closeTimeout.current)
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      setCoords({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+    }
+    setOpen(true)
+  }
+  const handleLeave = () => {
+    closeTimeout.current = setTimeout(() => setOpen(false), 150)
+  }
+
+  const radius = 55; 
+
+  return (
+    <div 
+      ref={containerRef}
+      className="relative flex items-center h-6 z-20"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+    >
+      {/* Collapsed stack */}
+      <div className={`flex -space-x-2 transition-opacity duration-200 ${open ? 'opacity-0' : 'opacity-100'}`}>
+        {assignees.map((empId, idx) => {
+          if (idx > 2) return null;
+          const emp = employees.find(e => e.id === empId)
+          if (!emp) return null
+          return emp.avatar_url ? (
+            <img key={empId} src={emp.avatar_url} alt="avatar" className="w-6 h-6 rounded-full border-2 border-white bg-white object-cover" />
+          ) : (
+            <div key={empId} className="w-6 h-6 rounded-full border-2 border-white bg-gray-200 text-gray-600 flex items-center justify-center text-[9px] font-bold">
+              {getInitials(emp.first_name, emp.last_name)}
+            </div>
+          )
+        })}
+        {assignees.length > 3 && (
+          <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-bold z-10">
+            +{assignees.length - 3}
+          </div>
+        )}
+      </div>
+
+      {/* Fan overlay rendered via Portal */}
+      {open && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100]" style={{ pointerEvents: 'none' }}>
+          <style>{`
+            @keyframes fanOutAnim {
+              from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+              to { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1); }
+            }
+          `}</style>
+          <div 
+            className="absolute rounded-full"
+            style={{ 
+              left: coords.x, 
+              top: coords.y, 
+              width: 160, 
+              height: 160,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'auto' 
+            }}
+            onMouseEnter={handleEnter}
+            onMouseLeave={handleLeave}
+          >
+            {assignees.map((empId, idx) => {
+              const emp = employees.find(e => e.id === empId)
+              if (!emp) return null
+              
+              // Pack them starting from top-right (-60 degrees) moving downwards with a fixed gap
+              const startAngle = -60
+              const angleStep = 45 // degrees between each avatar
+              const angle = startAngle + (idx * angleStep)
+              const rad = (angle * Math.PI) / 180
+              const x = Math.cos(rad) * radius
+              const y = Math.sin(rad) * radius
+
+              return (
+                <div 
+                  key={empId}
+                  className="absolute top-1/2 left-1/2 flex items-center group"
+                  style={{
+                    '--tx': `calc(-50% + ${x}px)`,
+                    '--ty': `calc(-50% + ${y}px)`,
+                    animation: `fanOutAnim 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards`,
+                    animationDelay: `${idx * 40}ms`,
+                    opacity: 0,
+                  } as React.CSSProperties}
+                >
+                  {emp.avatar_url ? (
+                    <img src={emp.avatar_url} alt="avatar" className="w-8 h-8 rounded-full shadow-md border-2 border-white object-cover hover:scale-110 transition-transform relative z-10" />
+                  ) : (
+                    <div 
+                      className="w-8 h-8 rounded-full border-2 border-white shadow-md text-white flex items-center justify-center text-[10px] font-bold hover:scale-110 transition-transform relative z-10"
+                      style={{ background: '#7e57c2' }} 
+                    >
+                      {getInitials(emp.first_name, emp.last_name)}
+                    </div>
+                  )}
+                  {/* Tooltip placed to the right */}
+                  <span className="absolute left-full ml-2 whitespace-nowrap bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-sm z-[100]">
+                    {emp.first_name} {emp.last_name}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
 
 function TasksPage() {
   const { user } = useAuth()
@@ -190,26 +313,7 @@ function TasksPage() {
                           )}
                         </div>
 
-                        {/* Avatars */}
-                        <div className="flex -space-x-2">
-                          {task.assignees?.map((empId, idx) => {
-                            if (idx > 2) return null; // Show max 3
-                            const emp = employees.find(e => e.id === empId)
-                            if (!emp) return null
-                            return emp.avatar_url ? (
-                              <img key={empId} src={emp.avatar_url} alt="avatar" className="w-6 h-6 rounded-full border-2 border-white bg-white" />
-                            ) : (
-                              <div key={empId} className="w-6 h-6 rounded-full border-2 border-white bg-gray-200 text-gray-600 flex items-center justify-center text-[9px] font-bold">
-                                {getInitials(emp.first_name, emp.last_name)}
-                              </div>
-                            )
-                          })}
-                          {(task.assignees?.length || 0) > 3 && (
-                            <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-bold z-10">
-                              +{task.assignees.length - 3}
-                            </div>
-                          )}
-                        </div>
+                        <RadialAssignees assignees={task.assignees} employees={employees} />
                       </div>
 
                     </div>

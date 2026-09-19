@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { Link, useRouterState, useRouter } from '@tanstack/react-router'
-import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare, ClipboardCheck } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../lib/AuthContext'
 import { NotificationBell } from './NotificationBell'
@@ -19,6 +19,7 @@ const ADMIN_NAV = [
   { to: '/employees',  label: 'Employees',    icon: Users },
   { to: '/attendance', label: 'Attendance',   icon: CalendarCheck },
   { to: '/inventory',  label: 'Inventory',    icon: Package },
+  { to: '/audits',     label: 'Audits',       icon: ClipboardCheck },
   { to: '/payroll',    label: 'Payroll',      icon: Wallet },
   { to: '/leave',      label: 'Leave',        icon: CalendarOff },
   { to: '/policies',   label: 'Policies',     icon: FileText },

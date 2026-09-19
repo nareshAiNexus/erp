@@ -136,50 +136,63 @@ export function AdminEmployeeDashboard() {
       )
     : employees
 
+  const { data: invMetrics } = useQuery({
+    queryKey: ['admin-inventory-metrics'],
+    queryFn: async () => {
+      const res = await dbQuery(`
+        SELECT 
+          COUNT(CASE WHEN category = 'system' THEN 1 END) as system_count,
+          COUNT(CASE WHEN category = 'electronics' THEN 1 END) as electronics_count,
+          COUNT(CASE WHEN category = 'other' THEN 1 END) as other_count,
+          COUNT(CASE WHEN working_condition = 'not_working' OR status = 'in_repair' THEN 1 END) as repair_count
+        FROM assets
+      `)
+      return res[0]
+    }
+  })
+
   return (
     <div className="fade-in">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Employees
+            Admin Dashboard
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-            Today's attendance — {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+            Today's overview — {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
-        <Link
-          to="/employees"
-          className="text-xs px-3 py-1.5 rounded-md border"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-        >
-          Manage
-        </Link>
       </div>
 
       {/* Summary stats */}
-      <div className="flex gap-4 mb-6">
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border"
-          style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
-        >
-          <Users size={14} style={{ color: 'var(--text-secondary)' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{employees.length}</span>
-          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Total</span>
-        </div>
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border"
-          style={{ borderColor: '#c8e6c9', background: '#e8f5e9' }}
-        >
-          <span className="text-sm font-semibold" style={{ color: '#2e7d32' }}>{presentCount}</span>
-          <span className="text-xs" style={{ color: '#2e7d32' }}>Present</span>
-        </div>
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border"
-          style={{ borderColor: '#ffcdd2', background: '#ffebee' }}
-        >
-          <span className="text-sm font-semibold" style={{ color: '#c62828' }}>{absentCount}</span>
-          <span className="text-xs" style={{ color: '#c62828' }}>Absent</span>
+      <div className="mb-6">
+        <div className="space-y-3 max-w-2xl">
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Employee Attendance</h2>
+          <div className="flex gap-4">
+            <div
+              className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+            >
+              <Users size={14} style={{ color: 'var(--text-secondary)' }} />
+              <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{employees.length}</span>
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Total</span>
+            </div>
+            <div
+              className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: '#c8e6c9', background: '#e8f5e9' }}
+            >
+              <span className="text-sm font-semibold" style={{ color: '#2e7d32' }}>{presentCount}</span>
+              <span className="text-xs" style={{ color: '#2e7d32' }}>Present</span>
+            </div>
+            <div
+              className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: '#ffcdd2', background: '#ffebee' }}
+            >
+              <span className="text-sm font-semibold" style={{ color: '#c62828' }}>{absentCount}</span>
+              <span className="text-xs" style={{ color: '#c62828' }}>Absent</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -211,6 +224,36 @@ export function AdminEmployeeDashboard() {
           ))}
         </div>
       )}
+
+      {/* Inventory Overview (moved to bottom) */}
+      <div className="mt-10 mb-6">
+        <div className="space-y-3 max-w-2xl">
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Inventory Overview</h2>
+          <div className="flex gap-4">
+            <div
+              className="flex-1 flex flex-col justify-center px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+            >
+              <span className="text-sm font-semibold text-blue-600">{invMetrics?.system_count || 0}</span>
+              <span className="text-xs text-gray-500">Systems</span>
+            </div>
+            <div
+              className="flex-1 flex flex-col justify-center px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+            >
+              <span className="text-sm font-semibold text-purple-600">{invMetrics?.electronics_count || 0}</span>
+              <span className="text-xs text-gray-500">Electronics</span>
+            </div>
+            <div
+              className="flex-1 flex flex-col justify-center px-4 py-2.5 rounded-lg border"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+            >
+              <span className="text-sm font-semibold text-orange-600">{invMetrics?.repair_count || 0}</span>
+              <span className="text-xs text-gray-500">In Repair</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

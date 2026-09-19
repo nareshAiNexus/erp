@@ -101,6 +101,68 @@ function apiPlugin() {
           }
         }).catch(() => sendJson(res, 400, { error: 'Invalid request body' }))
       })
+      // POST /api/inventory/credentials
+      server.middlewares.use('/api/inventory/credentials', (req: any, res: any, next: any) => {
+        if (req.method !== 'POST') return next()
+        readBody(req).then(async ({ asset_id, user_id }) => {
+          try {
+            if (!asset_id || !user_id) return sendJson(res, 400, { error: 'Missing required parameters' })
+            const { db } = await import('./src/lib/db.js')
+            const userResult = await db.query('SELECT auth_role FROM employees WHERE id = $1', [user_id])
+            if (userResult.rows.length === 0) return sendJson(res, 404, { error: 'User not found' })
+            const role = userResult.rows[0].auth_role
+            if (role !== 'admin' && role !== 'sysadmin') return sendJson(res, 403, { error: 'Access denied: Sysadmin privileges required to view credentials.' })
+            const credResult = await db.query('SELECT * FROM asset_credentials WHERE asset_id = $1', [asset_id])
+            if (credResult.rows.length === 0) return sendJson(res, 200, { data: null })
+            sendJson(res, 200, { data: credResult.rows[0] })
+          } catch (err: any) {
+            sendJson(res, 500, { error: err.message })
+          }
+        }).catch(() => sendJson(res, 400, { error: 'Invalid request body' }))
+      })
+
+      // POST /api/inventory/asset
+      server.middlewares.use('/api/inventory/asset', (req: any, res: any, next: any) => {
+        if (req.method !== 'POST') return next()
+        readBody(req).then(async (body) => {
+          try {
+            const { category, asset_type, model_name, operating_system, ram, storage_raw, storage_total_gb, storage_available_gb, processor, working_condition, other_product_name_id, quantity, purchase_date, price, department_id, allotted_employee_id, status, asset_tag } = body
+            if (!category || !asset_type) return sendJson(res, 400, { error: 'Category and Asset Type are required' })
+            if (category === 'system' && (!ram || !operating_system || !processor)) return sendJson(res, 400, { error: 'System assets must include RAM, OS, and Processor' })
+            if (category === 'electronics' && !working_condition) return sendJson(res, 400, { error: 'Electronics assets must include Working Condition' })
+            if (category === 'other' && (!other_product_name_id || !quantity)) return sendJson(res, 400, { error: 'Other assets must include a Product Name and Quantity' })
+
+            const { db } = await import('./src/lib/db.js')
+            const result = await db.query(
+              `INSERT INTO assets (asset_tag, category, asset_type, model_name, operating_system, ram, storage_raw, storage_total_gb, storage_available_gb, processor, working_condition, other_product_name_id, quantity, purchase_date, price, department_id, allotted_employee_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+              [asset_tag || null, category, asset_type, model_name || null, operating_system || null, ram || null, storage_raw || null, storage_total_gb || null, storage_available_gb || null, processor || null, working_condition || null, other_product_name_id || null, quantity || null, purchase_date || null, price || null, department_id || null, allotted_employee_id || null, status || 'active']
+            )
+            sendJson(res, 200, { data: result.rows[0] })
+          } catch (err: any) {
+            sendJson(res, 500, { error: err.message })
+          }
+        }).catch(() => sendJson(res, 400, { error: 'Invalid request body' }))
+      })
+
+      // POST /api/inventory/audit
+      server.middlewares.use('/api/inventory/audit', (req: any, res: any, next: any) => {
+        if (req.method !== 'POST') return next()
+        readBody(req).then(async (body) => {
+          try {
+            const { asset_id, audit_date, auditor, department_at_audit, allotted_employee_at_audit, ram_at_audit, storage_raw_at_audit, processor_at_audit, os_at_audit, keyboard_issued, mouse_issued, stand_issued, monitor_issued, charger_issued, bag_issued, condition_at_audit, observations, physical_status_at_audit } = body
+            if (!asset_id || !audit_date || !auditor) return sendJson(res, 400, { error: 'Asset ID, Audit Date, and Auditor are required' })
+
+            const { db } = await import('./src/lib/db.js')
+            const result = await db.query(
+              `INSERT INTO audits (asset_id, audit_date, auditor, department_at_audit, allotted_employee_at_audit, ram_at_audit, storage_raw_at_audit, processor_at_audit, os_at_audit, keyboard_issued, mouse_issued, stand_issued, monitor_issued, charger_issued, bag_issued, condition_at_audit, observations, physical_status_at_audit) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+              [asset_id, audit_date, auditor, department_at_audit || null, allotted_employee_at_audit || null, ram_at_audit || null, storage_raw_at_audit || null, processor_at_audit || null, os_at_audit || null, keyboard_issued || false, mouse_issued || false, stand_issued || false, monitor_issued || false, charger_issued || false, bag_issued || false, condition_at_audit || null, observations || null, physical_status_at_audit || null]
+            )
+            sendJson(res, 200, { data: result.rows[0] })
+          } catch (err: any) {
+            sendJson(res, 500, { error: err.message })
+          }
+        }).catch(() => sendJson(res, 400, { error: 'Invalid request body' }))
+      })
     }
   }
 }

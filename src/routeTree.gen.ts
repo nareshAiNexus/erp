@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AttendanceIndexRouteImport } from './routes/attendance/index'
+import { Route as AuditsIndexRouteImport } from './routes/audits/index'
 import { Route as EmployeesIndexRouteImport } from './routes/employees/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
+import { Route as InventoryIdRouteImport } from './routes/inventory/$id'
 import { Route as LeaveIndexRouteImport } from './routes/leave/index'
 import { Route as PayrollIndexRouteImport } from './routes/payroll/index'
 import { Route as PoliciesIndexRouteImport } from './routes/policies/index'
@@ -36,6 +38,11 @@ const AttendanceIndexRoute = AttendanceIndexRouteImport.update({
   path: '/attendance/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuditsIndexRoute = AuditsIndexRouteImport.update({
+  id: '/audits/',
+  path: '/audits/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EmployeesIndexRoute = EmployeesIndexRouteImport.update({
   id: '/employees/',
   path: '/employees/',
@@ -44,6 +51,11 @@ const EmployeesIndexRoute = EmployeesIndexRouteImport.update({
 const InventoryIndexRoute = InventoryIndexRouteImport.update({
   id: '/inventory/',
   path: '/inventory/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryIdRoute = InventoryIdRouteImport.update({
+  id: '/inventory/$id',
+  path: '/inventory/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaveIndexRoute = LeaveIndexRouteImport.update({
@@ -80,8 +92,10 @@ const TicketsIndexRoute = TicketsIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/inventory/$id': typeof InventoryIdRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance/': typeof AttendanceIndexRoute
+  '/audits/': typeof AuditsIndexRoute
   '/employees/': typeof EmployeesIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/leave/': typeof LeaveIndexRoute
@@ -93,8 +107,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/inventory/$id': typeof InventoryIdRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance': typeof AttendanceIndexRoute
+  '/audits': typeof AuditsIndexRoute
   '/employees': typeof EmployeesIndexRoute
   '/inventory': typeof InventoryIndexRoute
   '/leave': typeof LeaveIndexRoute
@@ -107,8 +123,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/inventory/$id': typeof InventoryIdRoute
   '/policies/$policyId': typeof PoliciesPolicyIdRoute
   '/attendance/': typeof AttendanceIndexRoute
+  '/audits/': typeof AuditsIndexRoute
   '/employees/': typeof EmployeesIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/leave/': typeof LeaveIndexRoute
@@ -122,8 +140,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/inventory/$id'
     | '/policies/$policyId'
     | '/attendance/'
+    | '/audits/'
     | '/employees/'
     | '/inventory/'
     | '/leave/'
@@ -135,8 +155,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/inventory/$id'
     | '/policies/$policyId'
     | '/attendance'
+    | '/audits'
     | '/employees'
     | '/inventory'
     | '/leave'
@@ -148,8 +170,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/login'
+    | '/inventory/$id'
     | '/policies/$policyId'
     | '/attendance/'
+    | '/audits/'
     | '/employees/'
     | '/inventory/'
     | '/leave/'
@@ -162,8 +186,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  InventoryIdRoute: typeof InventoryIdRoute
   PoliciesPolicyIdRoute: typeof PoliciesPolicyIdRoute
   AttendanceIndexRoute: typeof AttendanceIndexRoute
+  AuditsIndexRoute: typeof AuditsIndexRoute
   EmployeesIndexRoute: typeof EmployeesIndexRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
   LeaveIndexRoute: typeof LeaveIndexRoute
@@ -196,6 +222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AttendanceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/audits/': {
+      id: '/audits/'
+      path: '/audits'
+      fullPath: '/audits/'
+      preLoaderRoute: typeof AuditsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/employees/': {
       id: '/employees/'
       path: '/employees'
@@ -208,6 +241,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory/'
       preLoaderRoute: typeof InventoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory/$id': {
+      id: '/inventory/$id'
+      path: '/inventory/$id'
+      fullPath: '/inventory/$id'
+      preLoaderRoute: typeof InventoryIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leave/': {
@@ -258,8 +298,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  InventoryIdRoute: InventoryIdRoute,
   PoliciesPolicyIdRoute: PoliciesPolicyIdRoute,
   AttendanceIndexRoute: AttendanceIndexRoute,
+  AuditsIndexRoute: AuditsIndexRoute,
   EmployeesIndexRoute: EmployeesIndexRoute,
   InventoryIndexRoute: InventoryIndexRoute,
   LeaveIndexRoute: LeaveIndexRoute,

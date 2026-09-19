@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
 export const Route = createFileRoute('/login')({ component: LoginPage })
@@ -11,6 +12,7 @@ function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -23,15 +25,24 @@ function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      const data = await res.json()
+
+      let data: any = {}
+      const text = await res.text()
+      try { data = JSON.parse(text) } catch {
+        // Server returned non-JSON (e.g. HTML error page)
+        setError(`Server error (${res.status}): ${text.slice(0, 120)}`)
+        return
+      }
+
       if (!res.ok) {
-        setError(data.error ?? 'Login failed')
+        setError(data.error ?? `Login failed (${res.status})`)
         return
       }
       login(data)
       router.navigate({ to: '/' })
-    } catch {
-      setError('Network error — please try again')
+    } catch (err: any) {
+      // fetch() itself threw — true network error
+      setError(`Network error: ${err?.message ?? 'Cannot connect to server'}`)
     } finally {
       setLoading(false)
     }
@@ -48,12 +59,7 @@ function LoginPage() {
       >
         {/* Logo / brand */}
         <div className="flex items-center gap-2.5 mb-8">
-          <div
-            className="w-8 h-8 rounded flex items-center justify-center"
-            style={{ background: 'var(--text-primary)' }}
-          >
-            <span className="text-white font-bold text-sm">E</span>
-          </div>
+          <img src="/logo.png" alt="Logo" className="w-9 h-9 rounded-lg object-cover shadow-sm" />
           <div>
             <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
               ERP System
@@ -107,21 +113,32 @@ function LoginPage() {
             >
               Password
             </label>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border text-sm"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--bg)',
-                color: 'var(--text-primary)',
-              }}
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-9 rounded-md border text-sm"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--text-primary)',
+                }}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded"
+                style={{ color: 'var(--text-tertiary)' }}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
           </div>
 
           <button
