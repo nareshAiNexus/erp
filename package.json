@@ -1,5 +1,27 @@
 {
-  "name": "my-tanstack-app",
+  "name": "apex-erp",
+  "version": "1.0.0",
+  "description": "The Next-Gen Unified Enterprise Work OS: Merging Jira-Grade Agile Workflows, Slack-Level Real-Time Collaboration, and Enterprise HRIS into One Open-Source Platform.",
+  "license": "MIT",
+  "author": "Apex ERP Contributors",
+  "homepage": "https://github.com/apex-erp/erp#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apex-erp/erp.git"
+  },
+  "keywords": [
+    "erp",
+    "jira-alternative",
+    "slack-alternative",
+    "agile",
+    "kanban",
+    "chat",
+    "socketio",
+    "tanstack",
+    "react19",
+    "typescript",
+    "enterprise"
+  ],
   "private": true,
   "type": "module",
   "imports": {

@@ -21,5 +21,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
-implementation_plan.md
 *.env*
+!.env.example
+implementation_plan.md
