@@ -3,6 +3,8 @@ import { useEffect } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { Sidebar } from '../components/Sidebar'
 import { useAuth } from '../lib/AuthContext'
+import { ChatProvider } from '../lib/ChatContext'
+import { FloatingContactRail } from '../components/chat/FloatingContactRail'
 
 interface MyRouterContext {
   queryClient: QueryClient
@@ -41,13 +43,16 @@ function RootLayout() {
   if (!user) return null
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 min-w-0 overflow-auto">
-        <div className="px-8 py-8">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+    <ChatProvider>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="flex-1 min-w-0 overflow-auto">
+          <div className="px-8 py-8">
+            <Outlet />
+          </div>
+        </main>
+        <FloatingContactRail />
+      </div>
+    </ChatProvider>
   )
 }

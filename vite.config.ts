@@ -182,6 +182,19 @@ const config = defineConfig({
   server: {
     // Make sure /api/* is never passed to the SPA fallback
     fs: { strict: false },
+    proxy: {
+      // Forward Socket.IO to the standalone chat server
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true,
+      },
+      // Forward chat REST API to the standalone chat server
+      '/api/chat': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
 })
 

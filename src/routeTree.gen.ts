@@ -17,6 +17,7 @@ import { Route as EmployeesIndexRouteImport } from './routes/employees/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as InventoryIdRouteImport } from './routes/inventory/$id'
 import { Route as LeaveIndexRouteImport } from './routes/leave/index'
+import { Route as MessagesIndexRouteImport } from './routes/messages/index'
 import { Route as PayrollIndexRouteImport } from './routes/payroll/index'
 import { Route as PoliciesIndexRouteImport } from './routes/policies/index'
 import { Route as PoliciesPolicyIdRouteImport } from './routes/policies/$policyId'
@@ -63,6 +64,11 @@ const LeaveIndexRoute = LeaveIndexRouteImport.update({
   path: '/leave/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MessagesIndexRoute = MessagesIndexRouteImport.update({
+  id: '/messages/',
+  path: '/messages/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PayrollIndexRoute = PayrollIndexRouteImport.update({
   id: '/payroll/',
   path: '/payroll/',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/employees/': typeof EmployeesIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/leave/': typeof LeaveIndexRoute
+  '/messages/': typeof MessagesIndexRoute
   '/payroll/': typeof PayrollIndexRoute
   '/policies/': typeof PoliciesIndexRoute
   '/tasks/': typeof TasksIndexRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/employees': typeof EmployeesIndexRoute
   '/inventory': typeof InventoryIndexRoute
   '/leave': typeof LeaveIndexRoute
+  '/messages': typeof MessagesIndexRoute
   '/payroll': typeof PayrollIndexRoute
   '/policies': typeof PoliciesIndexRoute
   '/tasks': typeof TasksIndexRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/employees/': typeof EmployeesIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/leave/': typeof LeaveIndexRoute
+  '/messages/': typeof MessagesIndexRoute
   '/payroll/': typeof PayrollIndexRoute
   '/policies/': typeof PoliciesIndexRoute
   '/tasks/': typeof TasksIndexRoute
@@ -147,6 +156,7 @@ export interface FileRouteTypes {
     | '/employees/'
     | '/inventory/'
     | '/leave/'
+    | '/messages/'
     | '/payroll/'
     | '/policies/'
     | '/tasks/'
@@ -162,6 +172,7 @@ export interface FileRouteTypes {
     | '/employees'
     | '/inventory'
     | '/leave'
+    | '/messages'
     | '/payroll'
     | '/policies'
     | '/tasks'
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/employees/'
     | '/inventory/'
     | '/leave/'
+    | '/messages/'
     | '/payroll/'
     | '/policies/'
     | '/tasks/'
@@ -193,6 +205,7 @@ export interface RootRouteChildren {
   EmployeesIndexRoute: typeof EmployeesIndexRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
   LeaveIndexRoute: typeof LeaveIndexRoute
+  MessagesIndexRoute: typeof MessagesIndexRoute
   PayrollIndexRoute: typeof PayrollIndexRoute
   PoliciesIndexRoute: typeof PoliciesIndexRoute
   TasksIndexRoute: typeof TasksIndexRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaveIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/messages/': {
+      id: '/messages/'
+      path: '/messages'
+      fullPath: '/messages/'
+      preLoaderRoute: typeof MessagesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/payroll/': {
       id: '/payroll/'
       path: '/payroll'
@@ -305,6 +325,7 @@ const rootRouteChildren: RootRouteChildren = {
   EmployeesIndexRoute: EmployeesIndexRoute,
   InventoryIndexRoute: InventoryIndexRoute,
   LeaveIndexRoute: LeaveIndexRoute,
+  MessagesIndexRoute: MessagesIndexRoute,
   PayrollIndexRoute: PayrollIndexRoute,
   PoliciesIndexRoute: PoliciesIndexRoute,
   TasksIndexRoute: TasksIndexRoute,

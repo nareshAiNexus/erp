@@ -7,12 +7,13 @@
  */
 import { useState } from 'react'
 import { Link, useRouterState, useRouter } from '@tanstack/react-router'
-import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare, ClipboardCheck } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarCheck, Package, Wallet, CalendarOff, FileText, LogOut, Ticket, CheckSquare, ClipboardCheck, MessageSquare } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../lib/AuthContext'
 import { NotificationBell } from './NotificationBell'
 import { ProfileSidebar } from './ProfileSidebar'
 import { dbQuery } from '../lib/dbClient'
+import { useChat } from '../lib/ChatContext'
 
 const ADMIN_NAV = [
   { to: '/',           label: 'Dashboard',    icon: LayoutDashboard },
@@ -25,6 +26,7 @@ const ADMIN_NAV = [
   { to: '/policies',   label: 'Policies',     icon: FileText },
   { to: '/tickets',    label: 'Tickets',      icon: Ticket },
   { to: '/tasks',      label: 'Tasks',        icon: CheckSquare },
+  { to: '/messages',   label: 'Messages',     icon: MessageSquare },
 ]
 
 const USER_NAV = [
@@ -32,10 +34,12 @@ const USER_NAV = [
   { to: '/policies', label: 'Policies',    icon: FileText },
   { to: '/tickets',  label: 'My Tickets',  icon: Ticket },
   { to: '/tasks',    label: 'Tasks',       icon: CheckSquare },
+  { to: '/messages', label: 'Messages',    icon: MessageSquare },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuth()
+  const { totalUnread } = useChat()
   const router = useRouter()
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
@@ -106,6 +110,11 @@ export function Sidebar() {
               {item.to === '/leave' && pendingLeavesCount > 0 && (
                 <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md text-[10px] font-bold text-white bg-gray-500">
                   {pendingLeavesCount}
+                </span>
+              )}
+              {item.to === '/messages' && totalUnread > 0 && (
+                <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md text-[10px] font-bold text-white bg-gray-900">
+                  {totalUnread > 99 ? '99+' : totalUnread}
                 </span>
               )}
             </Link>
